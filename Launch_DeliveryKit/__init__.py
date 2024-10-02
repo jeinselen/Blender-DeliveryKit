@@ -3,7 +3,7 @@ import os
 
 # Local imports
 from .delivery_panel import DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery
-from .io_csv_points import ImportCSVPoints, ExportCSVPoints
+from . import io_csv_points
 from .io_csv_position import ImportCSVPosition, ExportCSVPosition
 from .io_volume_field import ImportVF, ExportVF
 from .io_volume_texture import ImportVT, ExportVT
@@ -72,7 +72,8 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('EXR', 'EXR — 3D Texture Strip', 'Export volume field as an image strip for Godot, Unity 3D, or Unreal Engine'),
 			(None),
 			('CSV-1', 'CSV — Item Position', 'Export CSV file of the selected object\'s position for all frames within the render range'),
-			('CSV-2', 'CSV — Point Position', 'Export CSV file of the selected object\'s points in object space')
+			('CSV-2', 'CSV — Point Position', 'Export CSV file of the selected object\'s points in object space'),
+			('CSV-3', 'CSV — Unity Coordinates', 'Export CSV file of the selected object\'s points in object XZY space')
 			],
 		default = 'FBX-1')
 	file_location: bpy.props.StringProperty(
@@ -122,17 +123,17 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 ###########################################################################
 # Import/Export menu items
 
-def menu_func_import(self, context):
-	self.layout.operator(ImportCSVPoints.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ImportCSVPosition.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ImportVF.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ImportVT.bl_idname, text="Custom Format (.custom)")
-
-def menu_func_export(self, context):
-	self.layout.operator(ExportCSVPoints.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ExportCSVPosition.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ExportVF.bl_idname, text="Custom Format (.custom)")
-	self.layout.operator(ExportVT.bl_idname, text="Custom Format (.custom)")
+#def menu_func_import(self, context):
+#	self.layout.operator(ImportCSVPoints.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ImportCSVPosition.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ImportVF.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ImportVT.bl_idname, text="Custom Format (.custom)")
+#
+#def menu_func_export(self, context):
+#	self.layout.operator(ExportCSVPoints.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ExportCSVPosition.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ExportVF.bl_idname, text="Custom Format (.custom)")
+#	self.layout.operator(ExportVT.bl_idname, text="Custom Format (.custom)")
 
 
 
@@ -143,13 +144,7 @@ def menu_func_export(self, context):
 # •Registration function
 # •Unregistration function
 
-classes = (DeliveryKitPreferences, DeliveryKitSettings,
-	DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery,
-#	ImportCSVPoints, ExportCSVPoints,
-#	ImportCSVPosition, ExportCSVPosition,
-#	ImportVF, ExportVF,
-#	ImportVT, ExportVT)
-	ImportCSVPoints, ExportCSVPoints)
+classes = (DeliveryKitPreferences, DeliveryKitSettings, DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery,)
 
 keymaps = []
 
@@ -166,6 +161,9 @@ def register():
 	# Add to import/export menu sections
 #	bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 #	bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+	
+	########## IO CSV Points ##########
+	io_csv_points.register()
 	
 	# Add keymaps for project versioning and viewport shading
 	wm = bpy.context.window_manager
@@ -189,6 +187,9 @@ def unregister():
 		km.keymap_items.remove(kmi)
 	keymaps.clear()
 	
+	########## IO CSV Points ##########
+	io_csv_points.unregister()
+	
 	# Remove from import/export menu sections
 #	bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
 #	bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
@@ -204,3 +205,4 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
+	

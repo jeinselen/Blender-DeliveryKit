@@ -452,6 +452,15 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 					fmt = '% s'
 					)
 		
+		elif format == "CSV-3":
+			for obj in bpy.context.selected_objects:
+				bpy.ops.export_points.csv(
+					filepath = location + obj.name + file_format,
+					channel_x = 'x',
+					channel_y = 'z',
+					channel_z = 'y',
+					relative_handles = True)
+		
 		if format != "CSV-1":
 			# Undo the previously completed non-mesh object deselection
 			bpy.ops.ed.undo()
@@ -581,6 +590,10 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			if settings.file_type == "CSV-2":
 				show_group = False
 				show_csv = False
+			
+			if settings.file_type == "CSV-3":
+				show_group = False
+				show_csv = True
 			
 			# UI Layout
 			layout = self.layout
