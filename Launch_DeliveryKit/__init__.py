@@ -2,11 +2,11 @@ import bpy
 import os
 
 # Local imports
-from .delivery_panel import DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery
+from . import delivery_panel
 from . import io_csv_points
-from .io_csv_position import ImportCSVPosition, ExportCSVPosition
-from .io_volume_field import ImportVF, ExportVF
-from .io_volume_texture import ImportVT, ExportVT
+#from . import io_csv_position
+#from . import io_volume_field
+#from . import io_volume_texture
 
 
 
@@ -15,19 +15,19 @@ from .io_volume_texture import ImportVT, ExportVT
 
 class DeliveryKitPreferences(bpy.types.AddonPreferences):
 	bl_idname = __package__
-		
-	########## Colour Palette ##########
+	
+	########## Delivery Panel Location ##########
 	
 	def update_delivery_category(self, context):
 		category = bpy.context.preferences.addons[__package__].preferences.delivery_category
 		try:
-			bpy.utils.unregister_class(DELIVERYKIT_PT_delivery)
+			bpy.utils.unregister_class(delivery_panel.DELIVERYKIT_PT_delivery)
 		except RuntimeError:
 			pass
 		if len(category) > 0:
-			DELIVERYKIT_PT_delivery.bl_category = category
-			bpy.utils.register_class(DELIVERYKIT_PT_delivery)
-			
+			delivery_panel.DELIVERYKIT_PT_delivery.bl_category = category
+			bpy.utils.register_class(delivery_panel.DELIVERYKIT_PT_delivery)
+	
 	delivery_category: bpy.props.StringProperty(
 		name="Delivery Panel",
 		description="Choose a category for the panel to be placed in",
@@ -121,30 +121,13 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 
 
 ###########################################################################
-# Import/Export menu items
-
-#def menu_func_import(self, context):
-#	self.layout.operator(ImportCSVPoints.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ImportCSVPosition.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ImportVF.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ImportVT.bl_idname, text="Custom Format (.custom)")
-#
-#def menu_func_export(self, context):
-#	self.layout.operator(ExportCSVPoints.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ExportCSVPosition.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ExportVF.bl_idname, text="Custom Format (.custom)")
-#	self.layout.operator(ExportVT.bl_idname, text="Custom Format (.custom)")
-
-
-
-###########################################################################
 # Addon registration functions
 # •Define classes being registered
 # •Define keymap array
 # •Registration function
 # •Unregistration function
 
-classes = (DeliveryKitPreferences, DeliveryKitSettings, DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery,)
+classes = (DeliveryKitPreferences, DeliveryKitSettings,)
 
 keymaps = []
 
@@ -158,26 +141,12 @@ def register():
 	# Add extension settings reference
 	bpy.types.Scene.delivery_kit_settings = bpy.props.PointerProperty(type=DeliveryKitSettings)
 	
-	# Add to import/export menu sections
-#	bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-#	bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
-	
-	########## IO CSV Points ##########
+	# Register Sub Modules
+	delivery_panel.register()
 	io_csv_points.register()
 	
-	# Add keymaps for project versioning and viewport shading
-	wm = bpy.context.window_manager
-	kc = wm.keyconfigs.addon
-	if kc:
-		# Global export
-		km = wm.keyconfigs.addon.keymaps.new(name='Window')
-		kmi = km.keymap_items.new(DELIVERYKIT_OT_output.bl_idname, 'E', 'PRESS', oskey=True, alt=True, shift=True)
-		keymaps.append((km, kmi))
-		
-		# 3D View export
-		km = wm.keyconfigs.addon.keymaps.new(name='3D View', space_type='VIEW_3D')
-		kmi = km.keymap_items.new(DELIVERYKIT_OT_output.bl_idname, 'E', 'PRESS', oskey=True, alt=True, shift=True)
-		keymaps.append((km, kmi))
+	# Run preferences update
+	# DeliveryKitPreferences.update_delivery_category(self, context)
 
 
 
@@ -187,12 +156,9 @@ def unregister():
 		km.keymap_items.remove(kmi)
 	keymaps.clear()
 	
-	########## IO CSV Points ##########
+	# Remove Sub Modules
+	delivery_panel.unregister()
 	io_csv_points.unregister()
-	
-	# Remove from import/export menu sections
-#	bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-#	bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 	
 	# Remove extension settings reference
 	del bpy.types.Scene.delivery_kit_settings
@@ -205,4 +171,3 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
-	

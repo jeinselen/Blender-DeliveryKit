@@ -46,3 +46,37 @@ class ExportCSVPosition(Operator, ExportHelper):
 		with open(filepath, 'w') as file:
 			file.write("CSV export data")
 		return {'FINISHED'}
+
+
+
+# Menu items
+
+def menu_func_import(self, context):
+	self.layout.operator(ImportCSVPosition.bl_idname, text="Position Data (.csv)")
+
+def menu_func_export(self, context):
+	self.layout.operator(ExportCSVPosition.bl_idname, text="Position Data (.csv)")
+
+
+
+# Register classes and add menu items
+
+classes = (ExportCSVPosition,)
+#classes = (ImportCSVPosition, ExportCSVPosition,)
+
+def register():
+	for cls in classes:
+		bpy.utils.register_class(cls)
+		
+#	bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+	bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+	
+def unregister():
+#	bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+	bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+	
+	for cls in reversed(classes):
+		bpy.utils.unregister_class(cls)
+		
+if __name__ == "__main__":
+	register()

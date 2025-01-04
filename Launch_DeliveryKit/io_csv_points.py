@@ -188,10 +188,10 @@ def swizzleChannels(vector, x, y, z):
 # Menu items
 
 def menu_func_import(self, context):
-	self.layout.operator(ImportCSVPoints.bl_idname, text="Comma Separated Values (.csv)")
+	self.layout.operator(ImportCSVPoints.bl_idname, text="Point Data (.csv)")
 
 def menu_func_export(self, context):
-	self.layout.operator(ExportCSVPoints.bl_idname, text="Comma Separated Values (.csv)")
+	self.layout.operator(ExportCSVPoints.bl_idname, text="Point Data (.csv)")
 
 
 
@@ -216,4 +216,3 @@ def unregister():
 
 if __name__ == "__main__":
 	register()
-	
