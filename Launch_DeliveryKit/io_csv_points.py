@@ -85,17 +85,14 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 		default=True,
 	)
 	
+	include_attributes: bpy.props.BoolProperty(
+		name="Include Attributes",
+		description="Export custom attributes",
+		default=True,
+	)
+	
 	def draw(self, context):
 		layout = self.layout
-		
-#		layout.label(text="Output Coordinates", icon="EMPTY_AXIS") # EMPTY_AXIS EMPTY_ARROWS
-#		col = layout.column(align=True)
-#		row0 = col.row(align=True)
-#		row0.prop(self, "channel_x", expand=True)
-#		row1 = col.row(align=True)
-#		row1.prop(self, "channel_y", expand=True)
-#		row2 = col.row(align=True)
-#		row2.prop(self, "channel_z", expand=True)
 		
 		channels = layout.grid_flow(row_major=True, columns=3, even_columns=True, even_rows=False, align=False)
 		channels.label(text="data", icon="EVENT_X")
@@ -108,9 +105,11 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 		zcol = channels.grid_flow(row_major=True, columns=2, even_columns=True, even_rows=True, align=True)
 		zcol.prop(self, "channel_z", expand=True)
 		
-#		layout.separator_spacer()
 		layout.separator(factor=1.0, type='AUTO')
+		layout.label(text="General Options", icon="MESH_GRID") # MESH_GRID GROUP_VERTEX LATTICE_DATA OUTLINER_DATA_LATTICE HANDLE_VECTOR OUTLINER_DATA_POINTCLOUD POINTCLOUD_DATA POINTCLOUD_POINT OUTLINER_OB_POINTCLOUD SNAP_MIDPOINT
+		layout.prop(self, "include_attributes")
 		
+		layout.separator(factor=1.0, type='AUTO')
 		layout.label(text="Bézier Options", icon="IPO_BEZIER") # CURVE_BEZCIRCLE CURVE_BEZCURVE IPO_BEZIER HANDLE_ALIGNED HANDLE_FREE
 		layout.prop(self, "relative_handles")
 	
@@ -121,7 +120,7 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 		# Get evaluated object
 		obj = bpy.context.evaluated_depsgraph_get().objects.get(bpy.context.active_object.name)
 		
-		bezier_curve = False
+		array = []
 		
 		# If the object is a curve object, try to find Bézier curves to get their handle data
 		if obj and obj.type == 'CURVE':
@@ -129,12 +128,11 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 			for spline in obj.data.splines:
 				# Check if it's a Bézier spline
 				if spline.type == 'BEZIER':
-					# Start array if not already started
-					if not bezier_curve:
-						array = [["bezier x","bezier y","bezier z","left x","left y","left z","right x","right y","right z"]]
-					
-					# Set Bézier boolean
-					bezier_curve = True
+					# Array headers
+					headers = ["bezier_x", "bezier_y", "bezier_z", "bezier_left_x", "bezier_left_y", "bezier_left_z", "bezier_right_x", "bezier_right_y", "bezier_right_z"]
+					if self.include_attributes:
+						headers = customAttributeHeaders(obj, headers)
+					array.append(headers)
 					
 					# Loop over all Bézier points in the spline
 					for point in spline.bezier_points:
@@ -146,22 +144,38 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 						
 						# Swizzle output channels
 						coord = swizzleChannels(coord, self.channel_x, self.channel_y, self.channel_z)
-						handle_left = swizzleChannels(handle_left, self.channel_x, self.channel_y, self.channel_z)
-						handle_right = swizzleChannels(handle_right, self.channel_x, self.channel_y, self.channel_z)
+						coord.append(swizzleChannels(handle_left, self.channel_x, self.channel_y, self.channel_z))
+						coord.append(swizzleChannels(handle_right, self.channel_x, self.channel_y, self.channel_z))
 						
-						array.append([coord.x, coord.y, coord.z, handle_left.x, handle_left.y, handle_left.z, handle_right.x, handle_right.y, handle_right.z])
+						# Add custom attributes
+						if self.include_attributes:
+							coord = customAttributeValues(obj, point.index, coord)
+						
+						array.append(coord)
 		
-		# If no Bézier curves are found, treat everything like a mesh
-		if not bezier_curve:
+		# If no curves are found, treat everything like a mesh
+		else:
 			# Collect data with temporary mesh conversion
-			array = [["x","y","z"]]
-			for v in obj.to_mesh().vertices:
-				coord = v.co
+			headers = ["x", "y", "z"]
+			if self.include_attributes:
+				headers = customAttributeHeaders(obj, headers)
+			
+			array.append(headers)
+			print(headers)
+			
+			# Loop over all vertices in the mesh
+			for point in obj.to_mesh().vertices:
+				coord = point.co
 				
 				# Swizzle output channels
-				coord = swizzleChannels(coord, self.channel_x, self.channel_y, self.channel_z)
+				values = swizzleChannels(coord, self.channel_x, self.channel_y, self.channel_z)
 				
-				array.append(coord)
+				# Add custom attributes
+				if self.include_attributes:
+					values = customAttributeValues(obj, point.index, values)
+				
+				array.append(values)
+				print(values)
 			
 			# Remove temporary mesh conversion
 			obj.to_mesh_clear()
@@ -173,15 +187,85 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 
 
 
-# Utility
+# Utilities
 
 def swizzleChannels(vector, x, y, z):
-	output = mathutils.Vector((0.0, 0.0, 0.0))
+	output = []
 	# I know this is a mess, but Python doesn't have nice switching, so here you go! Totally illegal usage of nested ternary notation
-	output.x = vector.x if x == "x" else (-vector.x if x == "-x" else (vector.y if x == "y" else (-vector.y if x == "-y" else (vector.z if x == "z" else -vector.z))))
-	output.y = vector.x if y == "x" else (-vector.x if y == "-x" else (vector.y if y == "y" else (-vector.y if y == "-y" else (vector.z if y == "z" else -vector.z))))
-	output.z = vector.x if z == "x" else (-vector.x if z == "-x" else (vector.y if z == "y" else (-vector.y if z == "-y" else (vector.z if z == "z" else -vector.z))))
+	output.append(vector.x if x == "x" else (-vector.x if x == "-x" else (vector.y if x == "y" else (-vector.y if x == "-y" else (vector.z if x == "z" else -vector.z)))))
+	output.append(vector.x if y == "x" else (-vector.x if y == "-x" else (vector.y if y == "y" else (-vector.y if y == "-y" else (vector.z if y == "z" else -vector.z)))))
+	output.append(vector.x if z == "x" else (-vector.x if z == "-x" else (vector.y if z == "y" else (-vector.y if z == "-y" else (vector.z if z == "z" else -vector.z)))))
 	return output
+
+def customAttributeHeaders(obj, headers):
+	for attr in obj.data.attributes:
+		# Only operate on attributes applied to points
+		if attr.domain != "POINT":
+			continue
+		
+		if attr.name.startswith("."):
+			continue
+		
+		if 2 >= len(attr.data):
+			continue
+		
+#		print(attr.domain)
+#		print(attr.name)
+		
+		# Single values
+		if attr.data_type == 'FLOAT':
+			headers.append(f"{attr.name}_f")
+		elif attr.data_type == 'INT':
+			headers.append(f"{attr.name}_i")
+		elif attr.data_type == 'BOOLEAN':
+			headers.append(f"{attr.name}_b")
+		# Vector values
+		elif attr.data_type == 'FLOAT_VECTOR':
+			headers.extend([f"{attr.name}_x", f"{attr.name}_y", f"{attr.name}_z"])
+		elif attr.data_type == 'FLOAT_COLOR':
+			headers.extend([f"{attr.name}_r", f"{attr.name}_g", f"{attr.name}_b", f"{attr.name}_a"])
+		elif attr.data_type == 'FLOAT2':
+			headers.extend([f"{attr.name}_u", f"{attr.name}_v"])
+#		elif attr.data_type == 'QUATERNION':
+#			headers.extend([f"{attr.name}_rw", f"{attr.name}_rx", f"{attr.name}_ry", f"{attr.name}_rz"])
+	return headers
+
+def customAttributeValues(obj, i, row):
+	for attr in obj.data.attributes:
+		# Only operate on attributes applied to points, and only if the index exists
+		if attr.domain != "POINT":
+			continue
+		
+		if attr.name.startswith("."):
+			continue
+		
+		if i >= len(attr.data):
+			continue
+		
+#		print(attr.domain)
+#		print(attr.name)
+		
+		# Single values
+		if attr.data_type == 'FLOAT':
+			row.append(attr.data[i].value)
+		elif attr.data_type == 'INT':
+			row.append(attr.data[i].value)
+		elif attr.data_type == 'BOOLEAN':
+			row.append(int(attr.data[i].value)) # Convert boolean to int (0 or 1)
+		# Vector values
+		elif attr.data_type == 'FLOAT_VECTOR':
+			vec = attr.data[i].vector
+			row.extend([vec.x, vec.y, vec.z])
+		elif attr.data_type == 'FLOAT_COLOR':
+			color = attr.data[i].color
+			row.extend([color[0], color[1], color[2], color[3]])
+		elif attr.data_type == 'FLOAT2':
+			vec2 = attr.data[i].vector
+			row.extend([vec2.x, vec2.y])
+#		elif attr.data_type == 'QUATERNION':
+#			quat = attr.data[i].quaternion
+#			row.extend([quat[0], quat[1], quat[2], quat[3]])
+	return row
 
 
 
