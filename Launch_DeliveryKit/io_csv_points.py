@@ -1,6 +1,8 @@
 import bpy
+import csv
 import mathutils
 import numpy
+import os
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 
 class ImportCSVPoints(bpy.types.Operator, ImportHelper):
@@ -19,11 +21,100 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 		return self.read(context, self.filepath)
 	
 	def read(self, context, filepath):
-		# Implement your import logic here
-		with open(filepath, 'r') as file:
-			data = file.read()
-		print("CSV import data:", data)
-		return {'FINISHED'}
+		try:
+			with open(filepath, 'r', newline='', encoding='utf-8') as file:
+				reader = csv.DictReader(file)
+				headers = reader.fieldnames
+				if not headers:
+					self.report({'ERROR'}, "No headers found in CSV file.")
+					return {'CANCELLED'}
+				
+				# Identify data types and group columns
+				attributes = {"FLOAT_COLOR": {}, "FLOAT_VECTOR": {}, "FLOAT2": {}, "INT": [], "FLOAT": [], "BOOL": []}
+				scalar_types = {"_i": "INT", "_f": "FLOAT", "_b": "BOOL"}
+				
+				for header in headers:
+					if header.endswith(("_r", "_g", "_b", "_a")):
+						base_name = header.rsplit("_", 1)[0]
+						attributes["FLOAT_COLOR"].setdefault(base_name, []).append(header)
+					elif header.endswith(("_x", "_y", "_z")):
+						base_name = header.rsplit("_", 1)[0]
+						attributes["FLOAT_VECTOR"].setdefault(base_name, []).append(header)
+					elif header.endswith(("_u", "_v")):
+						base_name = header.rsplit("_", 1)[0]
+						attributes["FLOAT2"].setdefault(base_name, []).append(header)
+					else:
+						for suffix, attr_type in scalar_types.items():
+							if header.endswith(suffix):
+								attributes[attr_type].append(header)
+								break
+				
+				# Get object data
+				obj_name = os.path.splitext(os.path.basename(filepath))[0]
+				mesh_data = bpy.data.meshes.new(name=obj_name)
+				mesh_obj = bpy.data.objects.new(obj_name, mesh_data)
+				bpy.context.scene.collection.objects.link(mesh_obj)
+				
+				# Prepare data storage
+				vertices = []
+				attr_data = {attr: [] for attr in headers if attr not in vertices}
+				
+				# Create Bezier curve (if data exists)
+				if any(header.startswith("bezier_") for header in headers) and any(header.startswith("bezier_left_") for header in headers) and any(header.startswith("bezier_right_") for header in headers):
+					curve_data = bpy.data.curves.new(name=obj_name, type='CURVE')
+					curve_data.dimensions = '3D'
+					spline = curve_data.splines.new(type='BEZIER')
+					
+					for row in reader:
+						if "bezier_x" in row and "bezier_y" in row and "bezier_z" in row and "bezier_left_x" in row and "bezier_left_y" in row and "bezier_left_z" in row and "bezier_right_x" in row and "bezier_right_y" in row and "bezier_right_z" in row:
+							bez_point = spline.bezier_points.add(1)
+							bez_point.co = (
+								float(row.get("bezier_x", 0)),
+								float(row.get("bezier_y", 0)),
+								float(row.get("bezier_z", 0))
+							)
+							bez_point.handle_left = (
+								float(row.get("bezier_left_x", 0)),
+								float(row.get("bezier_left_y", 0)),
+								float(row.get("bezier_left_z", 0))
+							)
+							bez_point.handle_right = (
+								float(row.get("bezier_right_x", 0)),
+								float(row.get("bezier_right_y", 0)),
+								float(row.get("bezier_right_z", 0))
+							)
+				
+				# Otherwise, create mesh
+				else:
+					# Detect position columns
+					pos_x = "position_x" if "position_x" in headers else "x"
+					pos_y = "position_y" if "position_y" in headers else "y"
+					pos_z = "position_z" if "position_z" in headers else "z"
+					
+					mesh_data = bpy.data.meshes.new(name=obj_name)
+					mesh_obj = bpy.data.objects.new(obj_name, mesh_data)
+					bpy.context.scene.collection.objects.link(mesh_obj)
+					
+					vertices = []
+					attributes = {header: [] for header in headers if header not in {pos_x, pos_y, pos_z}}
+					
+					for row in reader:
+						if pos_x in row and pos_y in row and pos_z in row:
+							vertices.append((float(row[pos_x]), float(row[pos_y]), float(row[pos_z])))
+							for attr, values in attributes.items():
+								values.append(row[attr])
+					
+					mesh_data.from_pydata(vertices, [], [])
+					
+					for attr, values in attributes.items():
+						attr_data = mesh_data.attributes.new(name=attr, type='FLOAT', domain='POINT')
+						attr_data.data.foreach_set("value", [float(v) for v in values])
+				
+				return {'FINISHED'}
+		
+		except Exception as e:
+			self.report({'ERROR'}, f"Failed to import CSV: {str(e)}")
+			return {'CANCELLED'}
 
 class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 	bl_idname = "export_points.csv"
@@ -79,6 +170,13 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 		default='z',
 	)
 	
+	
+	enable_bezier: bpy.props.BoolProperty(
+		name="Enable Bezier",
+		description="Export Bézier handles relative to the associated Bézier control point",
+		default=False,
+	)
+	
 	relative_handles: bpy.props.BoolProperty(
 		name="Relative Handles",
 		description="Export Bézier handles relative to the associated Bézier control point",
@@ -106,12 +204,17 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 		zcol.prop(self, "channel_z", expand=True)
 		
 		layout.separator(factor=1.0, type='AUTO')
-		layout.label(text="General Options", icon="MESH_GRID") # MESH_GRID GROUP_VERTEX LATTICE_DATA OUTLINER_DATA_LATTICE HANDLE_VECTOR OUTLINER_DATA_POINTCLOUD POINTCLOUD_DATA POINTCLOUD_POINT OUTLINER_OB_POINTCLOUD SNAP_MIDPOINT
-		layout.prop(self, "include_attributes")
+#		layout.label(text="General Options", icon="MESH_GRID") # MESH_GRID GROUP_VERTEX LATTICE_DATA OUTLINER_DATA_LATTICE HANDLE_VECTOR OUTLINER_DATA_POINTCLOUD POINTCLOUD_DATA POINTCLOUD_POINT OUTLINER_OB_POINTCLOUD SNAP_MIDPOINT
+		row = layout.row()
+		if self.enable_bezier:
+			row.active = False
+			row.enabled = False
+		row.prop(self, "include_attributes")
 		
-		layout.separator(factor=1.0, type='AUTO')
-		layout.label(text="Bézier Options", icon="IPO_BEZIER") # CURVE_BEZCIRCLE CURVE_BEZCURVE IPO_BEZIER HANDLE_ALIGNED HANDLE_FREE
-		layout.prop(self, "relative_handles")
+#		layout.separator(factor=1.0, type='AUTO')
+#		layout.label(text="Bézier Options", icon="IPO_BEZIER") # CURVE_BEZCIRCLE CURVE_BEZCURVE IPO_BEZIER HANDLE_ALIGNED HANDLE_FREE
+#		layout.prop(self, "enable_bezier")
+#		layout.prop(self, "relative_handles")
 	
 	def execute(self, context):
 		return self.write(context, self.filepath)
@@ -119,19 +222,18 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 	def write(self, context, filepath):
 		# Get evaluated object
 		obj = bpy.context.evaluated_depsgraph_get().objects.get(bpy.context.active_object.name)
+		obj_mesh = obj.to_mesh()
 		
 		array = []
 		
-		# If the object is a curve object, try to find Bézier curves to get their handle data
-		if obj and obj.type == 'CURVE':
+		# If Bézier mode is enabled and the object is a curve object, try to find Bézier curves to get their handle data
+		if self.enable_bezier and obj and obj.type == 'CURVE':
 			# Loop over all splines in the curve
 			for spline in obj.data.splines:
 				# Check if it's a Bézier spline
 				if spline.type == 'BEZIER':
 					# Array headers
 					headers = ["bezier_x", "bezier_y", "bezier_z", "bezier_left_x", "bezier_left_y", "bezier_left_z", "bezier_right_x", "bezier_right_y", "bezier_right_z"]
-					if self.include_attributes:
-						headers = customAttributeHeaders(obj, headers)
 					array.append(headers)
 					
 					# Loop over all Bézier points in the spline
@@ -147,24 +249,20 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 						coord.append(swizzleChannels(handle_left, self.channel_x, self.channel_y, self.channel_z))
 						coord.append(swizzleChannels(handle_right, self.channel_x, self.channel_y, self.channel_z))
 						
-						# Add custom attributes
-						if self.include_attributes:
-							coord = customAttributeValues(obj, point.index, coord)
-						
 						array.append(coord)
 		
-		# If no curves are found, treat everything like a mesh
+		# If Bézier mode is deactivated
 		else:
 			# Collect data with temporary mesh conversion
 			headers = ["x", "y", "z"]
 			if self.include_attributes:
-				headers = customAttributeHeaders(obj, headers)
+				headers = customAttributeHeaders(obj_mesh, headers)
 			
 			array.append(headers)
 			print(headers)
 			
 			# Loop over all vertices in the mesh
-			for point in obj.to_mesh().vertices:
+			for point in obj_mesh.vertices:
 				coord = point.co
 				
 				# Swizzle output channels
@@ -172,13 +270,13 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 				
 				# Add custom attributes
 				if self.include_attributes:
-					values = customAttributeValues(obj, point.index, values)
+					values = customAttributeValues(obj_mesh, point.index, values)
 				
 				array.append(values)
 				print(values)
 			
 			# Remove temporary mesh conversion
-			obj.to_mesh_clear()
+#			obj_mesh.to_mesh_clear()
 		
 		# Save out CSV file
 		numpy.savetxt(filepath, array, delimiter=",", newline='\n', fmt='% s')
@@ -198,73 +296,65 @@ def swizzleChannels(vector, x, y, z):
 	return output
 
 def customAttributeHeaders(obj, headers):
-	for attr in obj.data.attributes:
-		# Only operate on attributes applied to points
-		if attr.domain != "POINT":
-			continue
-		
-		if attr.name.startswith("."):
-			continue
-		
-		if 2 >= len(attr.data):
-			continue
-		
-#		print(attr.domain)
-#		print(attr.name)
-		
-		# Single values
-		if attr.data_type == 'FLOAT':
-			headers.append(f"{attr.name}_f")
-		elif attr.data_type == 'INT':
-			headers.append(f"{attr.name}_i")
-		elif attr.data_type == 'BOOLEAN':
-			headers.append(f"{attr.name}_b")
-		# Vector values
-		elif attr.data_type == 'FLOAT_VECTOR':
-			headers.extend([f"{attr.name}_x", f"{attr.name}_y", f"{attr.name}_z"])
-		elif attr.data_type == 'FLOAT_COLOR':
-			headers.extend([f"{attr.name}_r", f"{attr.name}_g", f"{attr.name}_b", f"{attr.name}_a"])
-		elif attr.data_type == 'FLOAT2':
-			headers.extend([f"{attr.name}_u", f"{attr.name}_v"])
-#		elif attr.data_type == 'QUATERNION':
-#			headers.extend([f"{attr.name}_rw", f"{attr.name}_rx", f"{attr.name}_ry", f"{attr.name}_rz"])
+	if hasattr(obj, 'data') and obj.data is not None:
+		obj = obj.data
+	
+	if hasattr(obj, 'attributes') and obj.attributes is not None:
+		for attr in obj.attributes:
+			# Only operate on attributes applied to points
+			if attr.domain != "POINT" or attr.name.startswith(".") or 1 > len(attr.data):
+				continue
+			
+			# Single values
+			elif attr.data_type == 'BOOLEAN':
+				headers.append(f"{attr.name}_b")
+			elif attr.data_type == 'INT':
+				headers.append(f"{attr.name}_i")
+			if attr.data_type == 'FLOAT':
+				headers.append(f"{attr.name}_f")
+			# Multiple values
+			elif attr.data_type == 'FLOAT2':
+				headers.extend([f"{attr.name}_u", f"{attr.name}_v"])
+			elif attr.data_type == 'FLOAT_VECTOR':
+				headers.extend([f"{attr.name}_x", f"{attr.name}_y", f"{attr.name}_z"])
+			elif attr.data_type == 'FLOAT_COLOR':
+				headers.extend([f"{attr.name}_r", f"{attr.name}_g", f"{attr.name}_b", f"{attr.name}_a"])
+#			elif attr.data_type == 'QUATERNION':
+#				headers.extend([f"{attr.name}_rx", f"{attr.name}_ry", f"{attr.name}_rz", f"{attr.name}_rw"])
+	
 	return headers
 
 def customAttributeValues(obj, i, row):
-	for attr in obj.data.attributes:
-		# Only operate on attributes applied to points, and only if the index exists
-		if attr.domain != "POINT":
-			continue
-		
-		if attr.name.startswith("."):
-			continue
-		
-		if i >= len(attr.data):
-			continue
-		
-#		print(attr.domain)
-#		print(attr.name)
-		
-		# Single values
-		if attr.data_type == 'FLOAT':
-			row.append(attr.data[i].value)
-		elif attr.data_type == 'INT':
-			row.append(attr.data[i].value)
-		elif attr.data_type == 'BOOLEAN':
-			row.append(int(attr.data[i].value)) # Convert boolean to int (0 or 1)
-		# Vector values
-		elif attr.data_type == 'FLOAT_VECTOR':
-			vec = attr.data[i].vector
-			row.extend([vec.x, vec.y, vec.z])
-		elif attr.data_type == 'FLOAT_COLOR':
-			color = attr.data[i].color
-			row.extend([color[0], color[1], color[2], color[3]])
-		elif attr.data_type == 'FLOAT2':
-			vec2 = attr.data[i].vector
-			row.extend([vec2.x, vec2.y])
-#		elif attr.data_type == 'QUATERNION':
-#			quat = attr.data[i].quaternion
-#			row.extend([quat[0], quat[1], quat[2], quat[3]])
+	if hasattr(obj, 'data') and obj.data is not None:
+		obj = obj.data
+	
+	if hasattr(obj, 'attributes') and obj.attributes is not None:
+		for attr in obj.attributes:
+			# Only operate on attributes applied to points
+			if attr.domain != "POINT" or attr.name.startswith(".") or i >= len(attr.data):
+				continue
+			
+			# Single values (extend)
+			elif attr.data_type == 'BOOLEAN':
+				row.append(int(attr.data[i].value)) # Convert boolean to int (0 or 1)
+			elif attr.data_type == 'INT':
+				row.append(attr.data[i].value)
+			if attr.data_type == 'FLOAT':
+				row.append(attr.data[i].value)
+			# Multiple values (append)
+			elif attr.data_type == 'FLOAT2':
+				vec2 = attr.data[i].vector
+				row.extend([vec2.x, vec2.y])
+			elif attr.data_type == 'FLOAT_VECTOR':
+				vec = attr.data[i].vector
+				row.extend([vec.x, vec.y, vec.z])
+			elif attr.data_type == 'FLOAT_COLOR':
+				color = attr.data[i].color
+				row.extend([color[0], color[1], color[2], color[3]])
+#			elif attr.data_type == 'QUATERNION':
+#				quat = attr.data[i].quaternion
+#				row.extend([quat[0], quat[1], quat[2], quat[3]])
+	
 	return row
 
 
@@ -281,18 +371,18 @@ def menu_func_export(self, context):
 
 # Register classes and add menu items
 
-classes = (ExportCSVPoints,)
-#classes = (ImportCSVPoints, ExportCSVPoints,)
+#classes = (ExportCSVPoints,)
+classes = (ImportCSVPoints, ExportCSVPoints,)
 
 def register():
 	for cls in classes:
 		bpy.utils.register_class(cls)
 	
-#	bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+	bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 	bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
 
 def unregister():
-#	bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+	bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
 	bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 	
 	for cls in reversed(classes):
