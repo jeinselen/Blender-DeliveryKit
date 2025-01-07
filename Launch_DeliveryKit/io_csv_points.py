@@ -35,15 +35,13 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 				
 				# Identify data types and group columns
 				attributes = {
-					"BOOL": [],
-					"FLOAT": [],
 					"INT": [],
+					"FLOAT": [],
 					"FLOAT2": {},
 					"FLOAT_VECTOR": {},
 					"FLOAT_COLOR": {},
 				}
 				scalar_types = {
-					"_0": "BOOL",
 					"_f": "FLOAT",
 					"_i": "INT",
 				}
@@ -140,21 +138,12 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 								color_attr.data.foreach_set("color", color_values)
 					
 					else:
-						# Scalar attributes (BOOL, INT, FLOAT)
+						# Scalar attributes (INT, FLOAT)
 						for attr in columns:
 							name = re.sub(r'_[0fiuvxyzrgba]{1}$', '', attr)
 							values_raw = [row[attr] for row in rows]
 							
-							if attr_type == "BOOL":
-#								bool_values = [bool(int(v)) for v in values_raw]
-								bool_values = [bool(True if float(v) > 0.5 else False) for v in values_raw]
-								bool_attr = mesh_data.attributes.new(
-									name=name,
-									type='BOOL',
-									domain='POINT'
-								)
-								bool_attr.data.foreach_set("boolean", bool_values)
-							elif attr_type == "INT":
+							if attr_type == "INT":
 								int_values = [int(v) for v in values_raw]
 								int_attr = mesh_data.attributes.new(
 									name=name,
@@ -326,7 +315,6 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 				headers = customAttributeHeaders(obj_mesh, headers)
 			
 			array.append(headers)
-			print(headers)
 			
 			# Loop over all vertices in the mesh
 			for point in obj_mesh.vertices:
@@ -340,7 +328,6 @@ class ExportCSVPoints(bpy.types.Operator, ExportHelper):
 					values = customAttributeValues(obj_mesh, point.index, values)
 				
 				array.append(values)
-				print(values)
 			
 			# Remove temporary mesh conversion
 #			obj_mesh.to_mesh_clear()
@@ -373,12 +360,11 @@ def customAttributeHeaders(obj, headers):
 				continue
 			
 			# Single values
-			elif attr.data_type == 'BOOLEAN':
-				headers.append(f"{attr.name}_b")
 			elif attr.data_type == 'INT':
 				headers.append(f"{attr.name}_i")
-			if attr.data_type == 'FLOAT':
+			elif attr.data_type == 'FLOAT':
 				headers.append(f"{attr.name}_f")
+			
 			# Multiple values
 			elif attr.data_type == 'FLOAT2':
 				headers.extend([f"{attr.name}_u", f"{attr.name}_v"])
@@ -402,12 +388,11 @@ def customAttributeValues(obj, i, row):
 				continue
 			
 			# Single values (extend)
-			elif attr.data_type == 'BOOLEAN':
-				row.append(int(attr.data[i].value)) # Convert boolean to int (0 or 1)
 			elif attr.data_type == 'INT':
 				row.append(attr.data[i].value)
-			if attr.data_type == 'FLOAT':
+			elif attr.data_type == 'FLOAT':
 				row.append(attr.data[i].value)
+			
 			# Multiple values (append)
 			elif attr.data_type == 'FLOAT2':
 				vec2 = attr.data[i].vector
