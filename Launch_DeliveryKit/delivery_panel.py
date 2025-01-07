@@ -97,7 +97,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						object_types = {'ARMATURE', 'CAMERA', 'EMPTY', 'LIGHT', 'MESH', 'OTHER'},
 						bake_space_transform = True, # True (this is "!experimental!")
 						
-						use_mesh_modifiers = True, # Come back to this...manually trigger application of mesh modifiers and convert attributes to UV maps
+						use_mesh_modifiers = True,
 						use_mesh_modifiers_render = True,
 						mesh_smooth_type = 'FACE', # OFF = Normals Only
 						colors_type = 'SRGB', # NONE, SRGB, LINEAR
