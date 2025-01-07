@@ -30,6 +30,9 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 					self.report({'ERROR'}, "No headers found in CSV file.")
 					return {'CANCELLED'}
 				
+				# Read all rows into a list
+				rows = list(reader)
+				
 				# Identify data types and group columns
 				attributes = {
 					"BOOL": [],
@@ -45,18 +48,21 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 					"_i": "INT",
 				}
 				
+				ignore_fields = {"position_x", "position_y", "position_z"}
+				
 				for header in headers:
+					# Skip position columns
+					if header in ignore_fields:
+						continue
+					
 					if header.endswith(("_u", "_v")):
-#						base_name = header.rsplit("_", 1)[0]
-						base_name = re.sub('_[uv]{1}$', '', header)
+						base_name = re.sub(r'_[uv]{1}$', '', header)
 						attributes["FLOAT2"].setdefault(base_name, []).append(header)
 					elif header.endswith(("_x", "_y", "_z")):
-#						base_name = header.rsplit("_", 1)[0]
-						base_name = re.sub('_[xyz]{1}$', '', header)
+						base_name = re.sub(r'_[xyz]{1}$', '', header)
 						attributes["FLOAT_VECTOR"].setdefault(base_name, []).append(header)
 					elif header.endswith(("_r", "_g", "_b", "_a")):
-#						base_name = header.rsplit("_", 1)[0]
-						base_name = re.sub('_[rgba]{1}$', '', header)
+						base_name = re.sub(r'_[rgba]{1}$', '', header)
 						attributes["FLOAT_COLOR"].setdefault(base_name, []).append(header)
 					else:
 						for suffix, attr_type in scalar_types.items():
@@ -68,130 +74,110 @@ class ImportCSVPoints(bpy.types.Operator, ImportHelper):
 				mesh_name = os.path.splitext(os.path.basename(filepath))[0]
 				mesh_data = bpy.data.meshes.new(name=mesh_name)
 				mesh_obj = bpy.data.objects.new(mesh_name, mesh_data)
-				bpy.context.scene.collection.objects.link(mesh_obj)
+				context.scene.collection.objects.link(mesh_obj)
 				
-				# Prepare data storage
+				# Collect vertex positions and store them
 				vertices = []
-				attr_data = {attr: [] for attr in headers if attr not in vertices}
-				
-				# Read data
-				for row in reader:
-					# Read position
+				for row in rows:
 					pos_x = float(row.get("position_x", row.get("x", 0)))
 					pos_y = float(row.get("position_y", row.get("y", 0)))
 					pos_z = float(row.get("position_z", row.get("z", 0)))
 					vertices.append((pos_x, pos_y, pos_z))
-					
-					# Collect attribute data
-					for attr in headers:
-						if attr not in {"position_x", "position_y", "position_z", "x", "y", "z"}:
-							attr_data[attr].append(row[attr])
 				
-				# Assign vertex positions
+				# Create the mesh geometry
 				mesh_data.from_pydata(vertices, [], [])
 				
 				# Process attributes
 				for attr_type, columns in attributes.items():
-					# Multiple values
 					if attr_type in {"FLOAT_COLOR", "FLOAT_VECTOR", "FLOAT2"}:
+						# Multi-component attributes
 						for base_name, channels in columns.items():
 							if len(channels) == 2 and attr_type == "FLOAT2":
 								# FLOAT2 (u, v)
-								float2_values = [
-									(float(row[channels[0]]), float(row[channels[1]]))
-									for row in reader
-								]
-								float2_attr = mesh_data.attributes.new(name=base_name, type='FLOAT2', domain='POINT')
-								float2_attr.data.foreach_set("value", float2_values)
+								float2_values = []
+								for row in rows:
+									f1 = float(row[channels[0]])
+									f2 = float(row[channels[1]])
+									# Flatten
+									float2_values.extend([f1, f2])
+								
+								float2_attr = mesh_data.attributes.new(
+									name=base_name,
+									type='FLOAT2',
+									domain='POINT'
+								)
+								float2_attr.data.foreach_set("vector", float2_values)
 							elif len(channels) == 3 and attr_type == "FLOAT_VECTOR":
 								# FLOAT_VECTOR (x, y, z)
-								vector_values = [
-									(float(row[channels[0]]), float(row[channels[1]]), float(row[channels[2]]))
-									for row in reader
-								]
-								vector_attr = mesh_data.attributes.new(name=base_name, type='FLOAT_VECTOR', domain='POINT')
+								vector_values = []
+								for row in rows:
+									f1 = float(row[channels[0]])
+									f2 = float(row[channels[1]])
+									f3 = float(row[channels[2]])
+									vector_values.extend([f1, f2, f3])
+								
+								vector_attr = mesh_data.attributes.new(
+									name=base_name,
+									type='FLOAT_VECTOR',
+									domain='POINT'
+								)
 								vector_attr.data.foreach_set("vector", vector_values)
 							elif len(channels) == 4 and attr_type == "FLOAT_COLOR":
 								# FLOAT_COLOR (r, g, b, a)
-								color_values = [
-									(float(row[channels[0]]), float(row[channels[1]]), float(row[channels[2]]), float(row[channels[3]]))
-									for row in reader
-								]
-								color_attr = mesh_data.attributes.new(name=base_name, type='FLOAT_COLOR', domain='POINT')
+								color_values = []
+								for row in rows:
+									f1 = float(row[channels[0]])
+									f2 = float(row[channels[1]])
+									f3 = float(row[channels[2]])
+									f4 = float(row[channels[3]])
+									color_values.extend([f1, f2, f3, f4])
+								
+								color_attr = mesh_data.attributes.new(
+									name=base_name,
+									type='FLOAT_COLOR',
+									domain='POINT'
+								)
 								color_attr.data.foreach_set("color", color_values)
-					# Single values
+					
 					else:
-						# Scalar attributes
+						# Scalar attributes (BOOL, INT, FLOAT)
 						for attr in columns:
-							values = [row[attr] for row in reader]
-							name = re.sub('_[0fiuvxyzrgba]{1}$', '', attr)
+							name = re.sub(r'_[0fiuvxyzrgba]{1}$', '', attr)
+							values_raw = [row[attr] for row in rows]
+							
 							if attr_type == "BOOL":
-								bool_values = [bool(int(v)) for v in values]
-								bool_attr = mesh_data.attributes.new(name=name, type='BOOL', domain='POINT')
-								bool_attr.data.foreach_set("value", bool_values)
+#								bool_values = [bool(int(v)) for v in values_raw]
+								bool_values = [bool(True if float(v) > 0.5 else False) for v in values_raw]
+								bool_attr = mesh_data.attributes.new(
+									name=name,
+									type='BOOL',
+									domain='POINT'
+								)
+								bool_attr.data.foreach_set("boolean", bool_values)
 							elif attr_type == "INT":
-								int_values = [int(v) for v in values]
-								int_attr = mesh_data.attributes.new(name=name, type='INT', domain='POINT')
+								int_values = [int(v) for v in values_raw]
+								int_attr = mesh_data.attributes.new(
+									name=name,
+									type='INT',
+									domain='POINT'
+								)
 								int_attr.data.foreach_set("value", int_values)
 							elif attr_type == "FLOAT":
-								float_values = [float(v) for v in values]
-								float_attr = mesh_data.attributes.new(name=name, type='FLOAT', domain='POINT')
+								float_values = [float(v) for v in values_raw]
+								float_attr = mesh_data.attributes.new(
+									name=name,
+									type='FLOAT',
+									domain='POINT'
+								)
 								float_attr.data.foreach_set("value", float_values)
 				
-				return {'FINISHED'}
+				# Select imported object and set it as as active
+				for obj in bpy.context.selected_objects:
+					obj.select_set(False)
+				mesh_obj.select_set(True)
+				context.view_layer.objects.active = mesh_obj
 				
-				# Create Bezier curve (if data exists)
-#				if any(header.startswith("bezier_") for header in headers) and any(header.startswith("bezier_left_") for header in headers) and any(header.startswith("bezier_right_") for header in headers):
-#					curve_data = bpy.data.curves.new(name=obj_name, type='CURVE')
-#					curve_data.dimensions = '3D'
-#					spline = curve_data.splines.new(type='BEZIER')
-#					
-#					for row in reader:
-#						if "bezier_x" in row and "bezier_y" in row and "bezier_z" in row and "bezier_left_x" in row and "bezier_left_y" in row and "bezier_left_z" in row and "bezier_right_x" in row and "bezier_right_y" in row and "bezier_right_z" in row:
-#							bez_point = spline.bezier_points.add(1)
-#							bez_point.co = (
-#								float(row.get("bezier_x", 0)),
-#								float(row.get("bezier_y", 0)),
-#								float(row.get("bezier_z", 0))
-#							)
-#							bez_point.handle_left = (
-#								float(row.get("bezier_left_x", 0)),
-#								float(row.get("bezier_left_y", 0)),
-#								float(row.get("bezier_left_z", 0))
-#							)
-#							bez_point.handle_right = (
-#								float(row.get("bezier_right_x", 0)),
-#								float(row.get("bezier_right_y", 0)),
-#								float(row.get("bezier_right_z", 0))
-#							)
-#				
-#				# Otherwise, create mesh
-#				else:
-#					# Detect position columns
-#					pos_x = "position_x" if "position_x" in headers else "x"
-#					pos_y = "position_y" if "position_y" in headers else "y"
-#					pos_z = "position_z" if "position_z" in headers else "z"
-#					
-#					mesh_data = bpy.data.meshes.new(name=obj_name)
-#					mesh_obj = bpy.data.objects.new(obj_name, mesh_data)
-#					bpy.context.scene.collection.objects.link(mesh_obj)
-#					
-#					vertices = []
-#					attributes = {header: [] for header in headers if header not in {pos_x, pos_y, pos_z}}
-#					
-#					for row in reader:
-#						if pos_x in row and pos_y in row and pos_z in row:
-#							vertices.append((float(row[pos_x]), float(row[pos_y]), float(row[pos_z])))
-#							for attr, values in attributes.items():
-#								values.append(row[attr])
-#					
-#					mesh_data.from_pydata(vertices, [], [])
-#					
-#					for attr, values in attributes.items():
-#						attr_data = mesh_data.attributes.new(name=attr, type='FLOAT', domain='POINT')
-#						attr_data.data.foreach_set("value", [float(v) for v in values])
-#				
-#				return {'FINISHED'}
+				return {'FINISHED'}
 		
 		except Exception as e:
 			self.report({'ERROR'}, f"Failed to import CSV: {str(e)}")
