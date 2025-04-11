@@ -2,24 +2,10 @@
 
 ![3D render of an abstract D-shaped logo made up of blocks with some rounded corners in soft yellow-oranges and purple, text in the image reads Delivery Kit from the Mograph team at Launch by NTT DATA](images/DeliveryKit.jpg)
 
-Based on a quick export toolset for Blender 2.8-4.1, Mesh Kit refactors the code for Blender 4.2. Features haven't changed significantly, so for the time being please refer to the original documentation for details.
+## Features:
 
-Includes:
-
-- https://github.com/jeinselen/VF-BlenderDelivery
-	- Unity 3D (FBX)
-	- Unreal Engine (FBX)
-	- ThreeJS (GLB)
-	- Element3D (OBJ)
-	- 3D Printing (STL)
-	- Unity 3D Volume Field (VF)
-	- 3D Texture Strip (EXR)
-	- Item Position (CSV)
-	- Item Vertices (CSV)
-
-
-
-***WARNING: This extension is in early beta and should be installed only for testing purposes.***
+- One-click export to a specified target folder with presets for Unity 3D, Unreal Engine, ThreeJS, 3D printing, CSV files, and more
+- Features are undergoing a slow evolution, replacing the older plugin structure with individual I/O scripts as time allows; very much a work in progress
 
 
 
@@ -40,4 +26,8 @@ Includes:
 
 This method will not connect to the centralised repository here on GitHub and updates will not be automatically available. If you don't need easy updates, don't want GitHub servers to be pinged when you start up Blender, or would just like to try some extensions without adding yet another repository to your Blender settings, this is the option for you.
 
-Software is provided as-is with no warranty or provision of suitability. These are internal tools and are shared because we want to support an open community. Bug reports are welcomed, but we cannot commit to fixing or adding features.
+
+
+## Notes:
+
+Software is provided as-is with no warranty or provision of suitability. These are internal tools and are shared because we want to support an open community. Bug reports are welcomed, but we cannot commit to fixing or adding features. Not all features may be actively maintained, as they're updated on an as-needed basis.
