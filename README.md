@@ -5,6 +5,9 @@
 ## Features:
 
 - One-click export to a specified target folder with presets for Unity 3D, Unreal Engine, ThreeJS, 3D printing, CSV files, and more
+
+  ![Screenshot-Export](images/Screenshot-Export.png)
+
 - Features are undergoing a slow evolution, replacing the older plugin structure with individual I/O scripts as time allows; very much a work in progress
 
 
