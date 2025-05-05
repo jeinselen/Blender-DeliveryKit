@@ -4,13 +4,44 @@ import mathutils
 import struct
 import numpy as np
 import os
+import importlib
+
+
+
+###########################################################################
+# Render Kit variables support
+
+# Load Render Kit variable replacement function if installed
+def _get_renderkit_module():
+	# Find the addon module name that ends with "Launch_Render_Kit"
+	for addon_key in bpy.context.preferences.addons.keys():
+		if addon_key.endswith("Launch_Render_Kit"):
+			try:
+				# Import its render_variables submodule dynamically
+				return importlib.import_module(f"{addon_key}.render_variables")
+			except ImportError:
+				# If that fails, stop searching (we found the addon but its structure is unexpected)
+				break
+	return None
+
+def replaceVariables(string):
+	rv_mod = _get_renderkit_module()
+	if not rv_mod or not hasattr(rv_mod, "replaceVariables"):
+		return string
+	try:
+		return rv_mod.replaceVariables(string)
+	except Exception as e:
+		print(f"[DeliveryKit] replaceVariables error: {e}")
+		return string
+
+
+
+###########################################################################
+# Main class
 
 # Define allowed object types
 delivery_object_types = ['CURVE', 'MESH', 'META', 'SURFACE', 'FONT']
 # Not all types are supported by all exporters, see the GitHub documentation for more details
-
-###########################################################################
-# Main class
 
 class DELIVERYKIT_OT_output(bpy.types.Operator):
 	bl_idname = "deliverykit.output"
@@ -49,6 +80,10 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 			for obj in bpy.context.collection.all_objects:
 				obj.select_set(True)
 		
+		# Filter file name for variables using RenderKit function
+		if replaceVariables:
+			file_name = replaceVariables(file_name)
+		
 		if format != "CSV-1":
 			# Push an undo state (seems easier than trying to re-select previously selected non-mesh objects)
 			bpy.ops.ed.undo_push()
@@ -78,6 +113,11 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 					# select individual object
 					obj.select_set(True)
 					file_name = obj.name
+					
+					# Filter file name for variables using RenderKit function
+					if replaceVariables:
+						file_name = replaceVariables(file_name)
+					
 					# Note to future self; you probably missed the comment block just above. Please stop freaking out. When combined is true the loop is exited after the first export pass. You can stop frantically scrolling for multi-export errors, you'll just get to the end of this section and figure out the solution is already implemented. Again.
 				
 				if "FBX" in format:
@@ -286,7 +326,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 					stride = 1 if is_float_data else 3
 					
 					# Create a new binary file for writing
-					with open(location + obj.name + file_format, 'wb') as file:
+					with open(location + file_name + file_format, 'wb') as file:
 						# Write the FourCC
 						file.write(struct.pack('4s', fourcc.encode('utf-8')))
 						
@@ -384,7 +424,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 					image.pixels = array.flatten()
 					
 					# Save image
-					image.filepath_raw = location + obj.name + file_format
+					image.filepath_raw = location + file_name + file_format
 					if format == 'PNG':
 						image.file_format = 'PNG'
 					else:
@@ -420,7 +460,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				
 				# Save out CSV file
 				np.savetxt(
-					location + obj.name + file_format,
+					location + file_name + file_format,
 					array,
 					delimiter = ",",
 					newline = '\n',
@@ -445,7 +485,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				
 				# Save out CSV file
 				np.savetxt(
-					location + obj.name + file_format,
+					location + file_name + file_format,
 					array,
 					delimiter = ",",
 					newline = '\n',
@@ -455,7 +495,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		elif format == "CSV-3":
 			for obj in bpy.context.selected_objects:
 				bpy.ops.export_points.csv(
-					filepath = location + obj.name + file_format,
+					filepath = location + file_name + file_format,
 					channel_x = 'x',
 					channel_y = 'z',
 					channel_z = 'y',
