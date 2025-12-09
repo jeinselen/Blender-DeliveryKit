@@ -262,18 +262,19 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		# MESH (3D PRINTING)
 		
 		elif format == "STL":
-			batch = 'OFF' if combined else 'OBJECT'
+#			batch = 'OFF' if combined else 'OBJECT'
+			batch = False if combined else True
 			output = location + file_name + file_format if combined else location
 			bpy.ops.wm.stl_export(
 				filepath = output,
 				check_existing = False, # Always overwrites existing files
 				
 				ascii_format = False,
-				use_batch = False,
+				use_batch = batch, # This might be used incorrectly?
 				export_selected_objects = True,
 				
-				global_scale = 1.0,
-				use_scene_unit = True, # Need to test this, see if it fixes scale errors in Cura
+				global_scale = 1000.0, # Exports the correct scale (converting from 0.001m to 1.0mm) to Cura, Orca, and Bambu Studio slicers
+				use_scene_unit = False,
 				
 				forward_axis = 'Y',
 				up_axis = 'Z',

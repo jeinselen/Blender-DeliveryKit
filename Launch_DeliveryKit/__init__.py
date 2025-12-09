@@ -27,24 +27,24 @@ class DeliveryKitPreferences(bpy.types.AddonPreferences):
 		if len(category) > 0:
 			delivery_panel.DELIVERYKIT_PT_delivery.bl_category = category
 			bpy.utils.register_class(delivery_panel.DELIVERYKIT_PT_delivery)
-	
+
 	delivery_category: bpy.props.StringProperty(
 		name="Delivery Panel",
 		description="Choose a category for the panel to be placed in",
 		default="Launch",
 		update=update_delivery_category)
 		# Consider adding search_options=(list of currently available tabs) for easier operation
-	
-	
-	
+
+
+
 	############################## Preferences UI ##############################
-	
+
 	# User Interface
 	def draw(self, context):
 		settings = context.scene.delivery_kit_settings
-		
+
 		layout = self.layout
-		
+
 		########## Delivery Panel ##########
 		layout.label(text="Delivery Interface", icon="FILE") # FILE CURRENT_FILE FILE_BLEND DUPLICATE
 		layout.prop(self, "delivery_category", text='Sidebar Tab')
@@ -137,14 +137,14 @@ def register():
 	# Register classes
 	for cls in classes:
 		bpy.utils.register_class(cls)
-	
+
 	# Add extension settings reference
 	bpy.types.Scene.delivery_kit_settings = bpy.props.PointerProperty(type=DeliveryKitSettings)
-	
+
 	# Register Sub Modules
 	delivery_panel.register()
 	io_csv_points.register()
-	
+
 	# Run preferences update
 	# DeliveryKitPreferences.update_delivery_category(self, context)
 
@@ -155,14 +155,14 @@ def unregister():
 	for km, kmi in keymaps:
 		km.keymap_items.remove(kmi)
 	keymaps.clear()
-	
+
 	# Remove Sub Modules
 	delivery_panel.unregister()
 	io_csv_points.unregister()
-	
+
 	# Remove extension settings reference
 	del bpy.types.Scene.delivery_kit_settings
-	
+
 	# Deregister classes
 	for cls in reversed(classes):
 		bpy.utils.unregister_class(cls)
