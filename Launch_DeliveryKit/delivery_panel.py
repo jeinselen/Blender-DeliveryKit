@@ -60,6 +60,8 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		location = bpy.path.abspath(settings.file_location)
 		format = settings.file_type
 		file_format = "." + format.lower().split("-")[0] # Get only the characters before a dash to support multiple variations of a single format
+		animation = True if settings.file_animation == "ANIM" else False
+		static = False if animation else True
 		combined = True if settings.file_grouping == "COMBINED" else False
 		active_object = bpy.context.active_object
 		
@@ -96,7 +98,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		
 		
 		# MESH (REALTIME 3D)
-		if file_format in ".fbx.glb.obj.usdz":
+		if file_format in ".fbx.glb.obj.usda.usdz":
 			# Push an undo state (easier than trying to re-select previously selected non-MESH objects?)
 			bpy.ops.ed.undo_push()
 			# Track number of undo steps to retrace after export is complete
@@ -166,44 +168,218 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						use_batch_own_dir = False,
 						use_metadata = True)
 					
+				# Compressed GLB for ThreeJS
 				elif format == "GLB":
 					bpy.ops.export_scene.gltf(
 						filepath = location + file_name + file_format,
-						check_existing = False, # Always overwrite existing files
+						check_existing = False,
+						export_import_convert_lighting_mode = 'SPEC',
+						export_use_gltfpack = False, # Blender 5.0 fails if this is enabled
 						export_format = 'GLB',
-#						export_copyright = '', # Consider adding copyright setting in preferences or scene?
+#						export_copyright = '',
 						
 						export_image_format = 'JPEG',
+#						export_image_format = 'WEBP',
+#						export_image_add_webp = False,
+#						export_image_webp_fallback = False,
+#						export_texture_dir = '',
+						export_jpeg_quality = 75,
+						export_image_quality = 75,
+#						export_keep_originals = False,
 						export_texcoords = True,
 						export_normals = True,
-						export_gn_mesh = True,
+						export_gn_mesh = True, # Experimental
+						
 						export_draco_mesh_compression_enable = True,
 						export_draco_mesh_compression_level = 6,
-						export_draco_position_quantization = 14,
+						export_draco_position_quantization = 12,
 						export_draco_normal_quantization = 10,
-						export_draco_texcoord_quantization = 12,
-						export_draco_color_quantization = 10,
-						export_draco_generic_quantization = 12,
+						export_draco_texcoord_quantization = 10,
+						export_draco_color_quantization = 8,
+						export_draco_generic_quantization = 8,
 						
+						export_tangents = False,
+						export_materials = 'EXPORT',
+						export_unused_images = False,
+						export_unused_textures = False,
+						export_vertex_color = 'MATERIAL',
+						export_vertex_color_name = 'Color',
+						export_all_vertex_colors = True,
+						export_active_vertex_color_when_no_material = True, # This will increase file size needlessly if not managed
+						export_attributes = True, # Exported attributes must start with an underscore
+						use_mesh_edges = False, # Special cases may need this
+						use_mesh_vertices = False, # Special cases may need this
+						export_cameras = True, # Include cameras (if selected)
 						use_selection = True,
-						use_active_collection = False, # Collections are converted manually to object selections above
+						use_visible = True, # Limit to visible
+						use_renderable = True, # Limit to renderable
 						
-						export_extras = False, # Only needed if custom properties are used
-						export_yup = True, # Standard Y-up orientation
-						export_apply = True,
+						use_active_collection = False, # Selection is used instead of collections
+						use_active_collection_with_nested = True,
+						use_active_scene = False,
+						collection = '',
+						at_collection_center = False,
 						
-						export_animations = True,
+						export_extras = True, # Include additional item data
+						export_yup = True,
+						export_apply = static, # Should be turned on for NON ANIMATED outputs
+						export_shared_accessors = False,
+						
+						export_current_frame = static, # Export the current frame only
+						export_animations = animation,
+						export_frame_range = True, # Limit to animation range
+						export_frame_step = 1,
+						export_force_sampling = True,
+						export_sampling_interpolation_fallback = 'LINEAR',
+						export_pointer_animation = False,
+						export_animation_mode = 'ACTIONS',
+						export_nla_strips_merged_animation_name = 'Animation',
+						export_def_bones = False,
+						export_hierarchy_flatten_bones = False,
+						export_hierarchy_flatten_objs = False,
+						export_armature_object_remove = False,
+						export_leaf_bone = False,
+						export_optimize_animation_size = True,
+						export_optimize_animation_keep_anim_armature = True,
+						export_optimize_animation_keep_anim_object = False,
+						export_optimize_disable_viewport = False,
+						export_negative_frame = 'SLIDE',
+						export_anim_slide_to_zero = False,
+						export_bake_animation = True, # Required for drivers or constraints
+						export_merge_animation = 'ACTION',
+						export_anim_single_armature = True,
+						export_reset_pose_bones = True,
+						export_rest_position_armature = True,
+						export_anim_scene_split_object = True,
+						export_skins = True,
+						export_influence_nb = 4,
+						export_all_influences = False,
+						
+						export_morph = True,
+						export_morph_normal = True,
+						export_morph_tangent = False,
+						export_morph_animation = True,
+						export_morph_reset_sk_data = True,
+						
+						export_lights = True, # Include lights
+						
+						export_try_sparse_sk = True,
+						export_try_omit_sparse_sk = True,
+						export_gpu_instances = False,
+						export_action_filter = False,
+						export_convert_animation_pointer = False,
+						export_nla_strips = True,
+						export_original_specular = False,
+						will_save_settings = True,
+						export_hierarchy_full_collections = False,
+						export_extra_animations = False)
+				
+				# GLTF export for Godot Engine
+				elif format == "GLTF":
+					bpy.ops.export_scene.gltf(
+						filepath = location + file_name + file_format,
+						check_existing = False,
+						export_import_convert_lighting_mode = 'SPEC',
+						gltf_export_id = '',
+						export_format = 'GLTF',
+#						export_copyright = '',
+						
+						# No compression
+						export_draco_mesh_compression_enable = False,
+						export_use_gltfpack = False,
+						
+						# Images
+						export_image_format = 'AUTO',
+#						export_image_add_webp = False,
+#						export_image_webp_fallback = False,
+						export_texture_dir = 'Textures', # Need to figure out options/workflow for this
+#						export_jpeg_quality = 75,
+#						export_image_quality = 75,
+						export_keep_originals = False,
+						export_texcoords = True,
+						export_normals = True,
+						export_tangents = False,
+						
+						export_gn_mesh = True, # Experimental export of instances from Geometry Nodes
+						
+						export_materials = 'EXPORT',
+						export_unused_images = False,
+						export_unused_textures = False,
+						export_vertex_color = 'MATERIAL',
+						export_vertex_color_name = 'Color',
+						export_all_vertex_colors = True,
+						export_active_vertex_color_when_no_material = True,
+						
+						export_attributes = True, # Useful in cases where Godot Engine ingests additional properties or attributes
+						use_mesh_edges = False, # Do not include 2-point poly lines
+						use_mesh_vertices = False, # Do not include 1-point vertices
+						
+						export_cameras = False,
+						use_selection = True,
+						use_visible = False, # Includes invisible objects
+						use_renderable = False,
+						
+						use_active_collection = False, # Do not use active collection, collections are already converted to selections
+						use_active_collection_with_nested = True,
+						use_active_scene = False,
+						at_collection_center = False,
+						
+						export_extras = True, # Includes item properties for use in more advanced Godot production pipelines
+						export_yup = True,
+						
+						export_apply = static, # Should be turned on for NON ANIMATED outputs
+						export_shared_accessors = False,
+						
+						export_animations = animation,
 						export_frame_range = True,
 						export_frame_step = 1,
 						export_force_sampling = True,
-						
-						export_def_bones = True, # Changed from default
-						export_optimize_animation_size = True, # Changed from default, may cause issues with stepped animations
-						
+						export_sampling_interpolation_fallback = 'LINEAR',
+						export_pointer_animation = False,
+						export_animation_mode = 'ACTIONS', # This may work better as NLA strips, according to this guide:
+							#https://supermatrix.studio/blog/best-workflow-for-exporting-animated-characters-from-blender-to-godot
+						export_nla_strips_merged_animation_name = 'Animation',
+						export_def_bones = False,
+						export_hierarchy_flatten_bones = False,
+						export_hierarchy_flatten_objs = False,
+						export_armature_object_remove = False,
+						export_leaf_bone = False,
+						export_optimize_animation_size = True,
+						export_optimize_animation_keep_anim_armature = True,
+						export_optimize_animation_keep_anim_object = False,
+						export_optimize_disable_viewport = False,
+						export_negative_frame = 'SLIDE',
+						export_anim_slide_to_zero = False,
+						export_bake_animation = False,
+						export_merge_animation = 'ACTION',
+						export_anim_single_armature = True,
+						export_reset_pose_bones = True,
+						export_current_frame = False,
+						export_rest_position_armature = True,
+						export_anim_scene_split_object = True,
+						export_skins = True,
+						export_influence_nb = 4,
+						export_all_influences = False,
+						export_morph = True,
+						export_morph_normal = True,
+						export_morph_tangent = False,
+						export_morph_animation = True,
+						export_morph_reset_sk_data = True,
 						export_lights = False,
-						export_gpu_instances = True,
-						will_save_settings = False)
+						export_try_sparse_sk = True,
+						export_try_omit_sparse_sk = False,
+						export_gpu_instances = False,
+						export_action_filter = False,
+						export_convert_animation_pointer = False,
+						export_nla_strips = True,
+						export_original_specular = False,
+						will_save_settings = False,
+						export_hierarchy_full_collections = False,
+						export_extra_animations = False,
+						export_loglevel = -1,
+						filter_glob = '*.glb')
 				
+				# OBJ export for Element 3D (likely deprecated soon, I don't think any of us use it anymore)
 				elif format == "OBJ":
 					bpy.ops.wm.obj_export(
 						filepath = location + file_name + file_format,
@@ -230,6 +406,64 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						export_smooth_groups = False,
 						smooth_group_bitflags = False)
 				
+				# USDA for Nvidia Omniverse
+				# https://docs.blender.org/api/current/bpy.ops.wm.html#bpy.ops.wm.usd_export
+				elif format == "USDA":
+					bpy.ops.wm.usd_export(
+						filepath = location + file_name + file_format,
+						check_existing = False, # Always overwrite existing files
+						
+						selected_objects_only = True, # Only export selected items
+						
+						export_hair = False, # This appears to be for hair _particle systems_ which should be phasing out?
+						export_uvmaps = True,
+						rename_uvmaps = True,
+						export_mesh_colors = True,
+						export_normals = True,
+						export_materials = True,
+						export_subdivision = 'BEST_MATCH',
+						
+						export_animation = animation,
+						export_armatures = True,
+						only_deform_bones = False,
+						export_shapekeys = True,
+						
+						use_instancing = True,
+						evaluation_mode = 'RENDER',
+						generate_preview_surface = True,
+						generate_materialx_network = True,
+						
+						convert_orientation = True,
+						export_global_forward_selection = 'NEGATIVE_Z',
+						export_global_up_selection = 'Y',
+						export_textures_mode = 'NEW',
+						overwrite_textures = True, # Always replace textures to ensure latest versions are included
+						relative_paths = True,
+						xform_op_mode = 'TRS',
+						root_prim_path = '/root',
+						
+						export_custom_properties = True,
+						custom_properties_namespace = 'userProperties',
+						author_blender_name = True,
+						convert_world_material = True,
+						allow_unicode = True,
+						
+						export_meshes = True,
+						export_lights = True,
+						export_cameras = True,
+						export_curves = True,
+						export_points = True,
+						export_volumes = True,
+						
+						triangulate_meshes = False,
+						quad_method = 'SHORTEST_DIAGONAL',
+						ngon_method = 'BEAUTY',
+						merge_parent_xform = False,
+						convert_scene_units = 'CENTIMETERS', # A random video on YouTube claimed it had to be centimeters
+						meters_per_unit = 1.0) # A random thread in an Nvidia forum said units had to be changed from 1.0 to 100.0, but centimeters would be 0.01? IDK
+						# GPT 5.1 claims it should NOT be converted to centimeters, and that Omniverse is also Z-up and nothing should be reoriented
+				
+				# USDZ for Apple Platforms
 #				elif format == "USDZ":
 #					bpy.ops.wm.usd_export(
 #						filepath = location + file_name + file_format,
@@ -545,6 +779,7 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			button_icon = "FILE"
 			button_title = ''
 			info_box = ''
+			show_anim = False
 			show_group = True
 			show_range = False
 			show_csv = False
@@ -564,12 +799,16 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 							info_box = 'Columns: ' + str(obj.data["vf_point_grid_y"])
 					else:
 						info_box = 'Volume export requires:,mesh with <=65536 points,"vf_point_grid..." properties,"field_vector" attribute'
+				
 				# CSV: count any items
 				elif settings.file_type == "CSV-1":
 					object_count = len(bpy.context.selected_objects)
+				
 				# Geometry: count only supported meshes and curves that are not hidden
 				else:
 					object_count = len([obj for obj in bpy.context.selected_objects if obj.type in delivery_object_types])
+				
+				
 				
 				# Button title
 				if (object_count > 1 and settings.file_grouping == "COMBINED" and not (settings.file_type == "CSV-1" or settings.file_type == "CSV-2")):
@@ -586,6 +825,8 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 				
 				# Button icon
 				button_icon = "OUTLINER_OB_MESH"
+			
+			
 			
 			# Active collection fallback (except for Volume Field)
 			elif not (settings.file_type == "VF" or settings.file_type == "PNG" or settings.file_type == "EXR"):
@@ -617,7 +858,10 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 					button_title = "Select mesh"
 			
 			# Specific display cases
-			if settings.file_type == "VF" or settings.file_type == "PNG" or settings.file_type == "EXR":
+			if settings.file_type in ("USDA", "USDZ"):
+				show_anim = True
+			
+			if settings.file_type in ("VF", "PNG", "EXR"):
 				show_group = False
 				show_csv = False
 			
@@ -642,6 +886,9 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			
 			layout.prop(settings, 'file_location', text = '')
 			layout.prop(settings, 'file_type', text = '')
+			
+			if show_anim:
+				layout.prop(settings, 'file_animation', expand = True)
 			
 			if show_group:
 				layout.prop(settings, 'file_grouping', expand = True)
@@ -717,3 +964,4 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
+	

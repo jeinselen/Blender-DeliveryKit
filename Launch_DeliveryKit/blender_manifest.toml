@@ -2,7 +2,7 @@ schema_version = "1.0.0"
 
 id = "Launch_Delivery_Kit"
 name = "Launch Delivery Kit"
-version = "0.0.5"
+version = "0.0.6"
 tagline = "Quickly export selections to a specified directory in a variety of formats"
 maintainer = "John Einselen <jeinselen@gmail.com>"
 website = "https://github.com/jeinselen/Blender-DeliveryKit"

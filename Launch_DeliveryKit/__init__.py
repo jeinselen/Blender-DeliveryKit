@@ -15,9 +15,9 @@ from . import io_csv_points
 
 class DeliveryKitPreferences(bpy.types.AddonPreferences):
 	bl_idname = __package__
-	
+
 	########## Delivery Panel Location ##########
-	
+
 	def update_delivery_category(self, context):
 		category = bpy.context.preferences.addons[__package__].preferences.delivery_category
 		try:
@@ -62,7 +62,9 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('FBX-1', 'FBX — Unity 3D', 'Export FBX binary file for Unity 3D'),
 			('FBX-2', 'FBX — Unreal Engine', 'Export FBX binary file for Unreal Engine'),
 			('GLB', 'GLB — ThreeJS', 'Export GLTF compressed binary file for ThreeJS'),
+#			('GLTF', 'GLTF — Godot Engine', 'Export GLTF file for Godot Engine'),
 			('OBJ', 'OBJ — Element3D', 'Export OBJ file for VideoCopilot Element 3D'),
+			('USDA', 'USDA — Omniverse', 'Export USDZ file for the Nvidia Omniverse platform'),
 #			('USDZ', 'USDZ — Xcode', 'Export USDZ file for Apple platforms including Xcode'),
 			(None),
 			('STL', 'STL — 3D Printing', 'Export individual STL file of each selected object for 3D printing'),
@@ -79,9 +81,18 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 	file_location: bpy.props.StringProperty(
 		name = "Delivery Location",
 		description = "Delivery location for all exported files",
+		subtype = "DIR_PATH",
+		options={'OUTPUT_PATH','PATH_SUPPORTS_BLEND_RELATIVE','SUPPORTS_TEMPLATES'},
 		default = "//",
-		maxlen = 4096,
-		subtype = "DIR_PATH")
+		maxlen = 4096)
+	file_animation: bpy.props.EnumProperty(
+		name = 'Animation',
+		description = 'Sets static or animated output',
+		items = [
+			('STATIC', 'Static', 'Export current frame without animation'),
+			('ANIM', 'Animated', 'Export animation within timeline range')
+			],
+		default = 'STATIC')
 	file_grouping: bpy.props.EnumProperty(
 		name = 'Grouping',
 		description = 'Sets combined or individual file outputs',
@@ -171,3 +182,4 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
+	
