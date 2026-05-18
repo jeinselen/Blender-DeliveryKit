@@ -458,24 +458,24 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						# GPT 5.1 claims it should NOT be converted to centimeters, and that Omniverse is also Z-up and nothing should be reoriented
 				
 				# USDZ for Apple Platforms
-#				elif format == "USDZ":
-#					bpy.ops.wm.usd_export(
-#						filepath = location + file_name + file_format,
-#						check_existing = False, # Changed from default
-#						# Removed GUI options
-#						selected_objects_only = True, # Changed from default
-#						visible_objects_only = True,
-#						export_animation = False, # May need to add an option for enabling animation exports depending on the project
-#						export_hair = False,
-#						export_uvmaps = True, # Need to test this: USD uses "st" as the default uv map name, and the exporter apparently doesn't convert Blender's default "UVmap" automatically?
-#						export_normals = True,
-#						export_materials = True,
-#						use_instancing = False,
-#						evaluation_mode = 'RENDER',
-#						generate_preview_surface = True,
-#						export_textures = True,
-#						overwrite_textures = True, # Changed from default
-#						relative_paths = True)
+				elif format == "USDZ":
+					bpy.ops.wm.usd_export(
+						filepath = location + file_name + file_format,
+						check_existing = False, # Changed from default
+						# Removed GUI options
+						selected_objects_only = True, # Changed from default
+						visible_objects_only = True,
+						export_animation = False, # May need to add an option for enabling animation exports depending on the project
+						export_hair = False,
+						export_uvmaps = True, # Need to test this: USD uses "st" as the default uv map name, and the exporter apparently doesn't convert Blender's default "UVmap" automatically?
+						export_normals = True,
+						export_materials = True,
+						use_instancing = False,
+						evaluation_mode = 'RENDER',
+						generate_preview_surface = True,
+						export_textures = True,
+						overwrite_textures = True, # Changed from default
+						relative_paths = True)
 				
 				# Interrupt the loop if we're exporting all objects to the same file
 				if combined:
@@ -507,22 +507,44 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				forward_axis = 'Y',
 				up_axis = 'Z',
 				apply_modifiers = True)
-		# DATA (CSV POINTS OR POSITIONS)
+		
+		# DATA (CSV POINTS OR TRASNFORMS, SPLINEMAKER JSON, SVG CURVES)
 			
-		elif format == "CSV":
+		elif format == "CSV-1":
 			bpy.ops.export_scene.csv_data(
 				filepath = location + file_name + file_format,
-				mode = settings.csv_mode,
-				grouping = settings.file_grouping,
+				mode = 'POINTS',
+				grouping = 'INDIVIDUAL',
 				space = settings.csv_position,
 				channel_x = 'x',
 				channel_y = 'y',
 				channel_z = 'z')
 		
+		elif format == "CSV-2":
+			bpy.ops.export_scene.csv_data(
+				filepath = location + file_name + file_format,
+				mode = 'POSITIONS',
+				grouping = 'INDIVIDUAL',
+				space = settings.csv_position,
+				channel_x = 'x',
+				channel_y = 'y',
+				channel_z = 'z')
+		
+		elif format == "JSON":
+			bpy.ops.export_scene.spline_maker_json(
+				filepath = location + file_name + file_format)
+		
+		elif format == "SVG":
+			bpy.ops.export_curve.svg_bezier_nurbs(
+				filepath = location + file_name + file_format,
+				tolerance = 0.1,
+				coordinate_scale = 1000.0,
+				view_box_mode = 'SCENE_ORIGIN')
+		
 		if filter_selection:
 			# Undo the previously completed non-mesh object deselection
 			bpy.ops.ed.undo()
-			
+		
 		# Reset to original mode
 		if active_object is not None:
 			bpy.ops.object.mode_set(mode = object_mode)
@@ -723,4 +745,5 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
+	
 	

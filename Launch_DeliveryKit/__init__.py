@@ -3,7 +3,7 @@ import bpy
 # Local imports
 from . import delivery_panel
 from . import io_csv
-from . import io_curves
+from . import io_svg
 from . import io_splinemaker
 
 
@@ -60,14 +60,17 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('FBX-1', 'FBX — Unity 3D', 'Export FBX binary file for Unity 3D'),
 			('FBX-2', 'FBX — Unreal Engine', 'Export FBX binary file for Unreal Engine'),
 			('GLB', 'GLB — ThreeJS', 'Export GLTF compressed binary file for ThreeJS'),
-#			('GLTF', 'GLTF — Godot Engine', 'Export GLTF file for Godot Engine'),
+			('GLTF', 'GLTF — Godot Engine', 'Export GLTF file for Godot Engine'),
 			('OBJ', 'OBJ — Element3D', 'Export OBJ file for VideoCopilot Element 3D'),
-			('USDA', 'USDA — Omniverse', 'Export USDZ file for the Nvidia Omniverse platform'),
-#			('USDZ', 'USDZ — Xcode', 'Export USDZ file for Apple platforms including Xcode'),
+#			('USDA', 'USDA — Omniverse', 'Export USDZ file for the Nvidia Omniverse platform'),
+			('USDZ', 'USDZ — Xcode', 'Export USDZ file for Apple platforms'),
 			(None),
 			('STL', 'STL — 3D Printing', 'Export individual STL file of each selected object for 3D printing'),
 			(None),
-			('CSV', 'CSV — Data', 'Export CSV point or transform data')
+			('CSV-1', 'CSV — Points', 'Export vertex positions as CSV data'),
+			('CSV-2', 'CSV — Transforms', 'Export object transforms over time as CSV data'),
+			('JSON', 'JSON — SplineMaker', 'Export object transforms over time as CSV data'),
+			('SVG', 'SVG — Rive', 'Export Bézier, NURBS, and poly line curve objects as 2D vectors')
 			],
 		default = 'FBX-1')
 	file_location: bpy.props.StringProperty(
@@ -144,7 +147,7 @@ def register():
 	# Register Sub Modules
 	delivery_panel.register()
 	io_csv.register()
-	io_curves.register()
+	io_svg.register()
 	io_splinemaker.register()
 
 	# Run preferences update
@@ -160,7 +163,7 @@ def unregister():
 
 	# Remove Sub Modules
 	io_splinemaker.unregister()
-	io_curves.unregister()
+	io_svg.unregister()
 	io_csv.unregister()
 	delivery_panel.unregister()
 
@@ -175,4 +178,5 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
+	
 	

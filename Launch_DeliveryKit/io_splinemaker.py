@@ -107,10 +107,10 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
         raise ValueError(f"Could not read JSON file: {filepath}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"JSON parse error in {filepath}: {exc}") from exc
-
+    
     if not isinstance(raw_data, dict):
         raise ValueError("SplineMaker JSON root must be an object")
-
+    
     warnings: list[str] = []
     project = SplineMakerProject(
         project_name=path.stem,
@@ -121,7 +121,7 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
             DEFAULT_CURVE_SMOOTHNESS,
         ),
     )
-
+    
     action_area_sizes = raw_data.get("action_area_sizes", {})
     if isinstance(action_area_sizes, dict):
         project.action_area_left = max(
@@ -136,21 +136,21 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
         warnings.append("action_area_sizes is not an object; default sizes were used")
         project.action_area_left = DEFAULT_ACTION_AREA_SIZE
         project.action_area_right = DEFAULT_ACTION_AREA_SIZE
-
+    
     splines_data = raw_data.get("splines", [])
     if not isinstance(splines_data, list):
         raise ValueError("SplineMaker JSON field 'splines' must be an array")
-
+    
     for spline_index, spline_data in enumerate(splines_data):
         if not isinstance(spline_data, dict):
             warnings.append(f"Spline {spline_index} is not an object and was skipped")
             continue
-
+        
         points_data = spline_data.get("points", [])
         if not isinstance(points_data, list):
             warnings.append(f"Spline {spline_index} points are not an array and were skipped")
             continue
-
+        
         points: list[SplineMakerPoint] = []
         for point_index, point_data in enumerate(points_data):
             if not isinstance(point_data, dict):
@@ -158,7 +158,7 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
                     f"Spline {spline_index} point {point_index} is not an object and was skipped"
                 )
                 continue
-
+            
             points.append(
                 SplineMakerPoint(
                     x=_coerce_float(point_data.get("x"), 0.0),
@@ -168,13 +168,13 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
                     weight=max(0.001, _coerce_float(point_data.get("weight"), 1.0)),
                 )
             )
-
+        
         if len(points) < MIN_POINT_COUNT:
             warnings.append(
                 f"Spline {spline_index} has fewer than {MIN_POINT_COUNT} valid points and was skipped"
             )
             continue
-
+        
         project.splines.append(
             SplineMakerSpline(
                 points=points,
@@ -189,7 +189,7 @@ def load_project(filepath: str) -> tuple[SplineMakerProject, list[str]]:
                 ),
             )
         )
-
+    
     return project, warnings
 
 
@@ -248,7 +248,7 @@ def _set_idprop_value(id_owner, key: str, value, description: str) -> None:
 
 def store_project_metadata(curve_object: bpy.types.Object, project: SplineMakerProject) -> None:
     curve_data = curve_object.data
-
+    
     _set_idprop_value(curve_object, PROP_MARKER, True, "Marks this object as SplineMaker data")
     _set_idprop_value(
         curve_object,
@@ -286,7 +286,7 @@ def store_project_metadata(curve_object: bpy.types.Object, project: SplineMakerP
         float(project.action_area_right),
         "SplineMaker right controller action area size",
     )
-
+    
     curve_data[PROP_MARKER] = True
     curve_data[PROP_PROJECT_NAME] = project.project_name or curve_object.name
     curve_data[PROP_VERSION] = max(1, int(project.version))
@@ -300,7 +300,7 @@ def build_curve_object_from_project(
     target_object: bpy.types.Object | None = None,
 ) -> tuple[bpy.types.Object, list[str]]:
     warnings: list[str] = []
-
+    
     if target_object is None:
         curve_data = bpy.data.curves.new(name=f"{object_name}Data", type="CURVE")
         curve_object = bpy.data.objects.new(object_name, curve_data)
@@ -311,10 +311,10 @@ def build_curve_object_from_project(
             raise ValueError("Target object must be a curve")
         curve_object = target_object
         curve_data = _ensure_single_user_curve_data(curve_object)
-
+    
     curve_data.dimensions = "3D"
     clear_curve_splines(curve_data)
-
+    
     for spline_index, spline_spec in enumerate(project.splines):
         point_count = len(spline_spec.points)
         if point_count < MIN_POINT_COUNT:
@@ -322,10 +322,10 @@ def build_curve_object_from_project(
                 f"Spline {spline_index} has fewer than {MIN_POINT_COUNT} points and was skipped"
             )
             continue
-
+        
         blender_spline = curve_data.splines.new("NURBS")
         blender_spline.points.add(point_count - 1)
-
+        
         for point_index, point in enumerate(spline_spec.points):
             blender_point = blender_spline.points[point_index]
             blender_x, blender_y, blender_z = spline_to_blender_coords(point.x, point.y, point.z)
@@ -337,17 +337,17 @@ def build_curve_object_from_project(
             )
             blender_point.radius = max(0.001, float(point.size))
             blender_point.tilt = 0.0
-
+        
         blender_spline.order_u = clamp_order(spline_spec.order_u, point_count)
         blender_spline.resolution_u = max(1, int(spline_spec.resolution_u))
         blender_spline.use_cyclic_u = bool(spline_spec.cyclic)
         blender_spline.use_endpoint_u = not blender_spline.use_cyclic_u
-
+    
     if project.project_name and target_object is None:
         curve_object.name = project.project_name
 
     store_project_metadata(curve_object, project)
-
+    
     return curve_object, warnings
 
 
@@ -372,7 +372,7 @@ def resolve_export_objects(
         obj for obj in context.scene.objects if obj.type == "CURVE" and bool(obj.get(PROP_MARKER))
     ]
     all_curve_objects = [obj for obj in context.scene.objects if obj.type == "CURVE"]
-
+    
     if source_mode == "ACTIVE":
         return [active_object] if active_object else []
     if source_mode == "SELECTED":
@@ -429,11 +429,11 @@ def project_from_curve_objects(
 ) -> tuple[SplineMakerProject, list[str]]:
     if not curve_objects:
         raise ValueError("No curve objects were provided for export")
-
+    
     warnings: list[str] = []
     primary_object = curve_objects[0]
     metadata = read_project_metadata(primary_object)
-
+    
     project = SplineMakerProject(
         project_name=project_name or metadata.project_name or primary_object.name,
         source_path=source_path or metadata.source_path,
@@ -454,7 +454,7 @@ def project_from_curve_objects(
             ),
         ),
     )
-
+    
     for obj in curve_objects[1:]:
         other_meta = read_project_metadata(obj)
         if (
@@ -467,25 +467,25 @@ def project_from_curve_objects(
                 "Multiple curve objects had different SplineMaker metadata; export used the first object's values"
             )
             break
-
+    
     for curve_object in curve_objects:
         if curve_object.type != "CURVE":
             warnings.append(f"Object '{curve_object.name}' is not a curve and was skipped")
             continue
-
+        
         for spline_index, spline in enumerate(curve_object.data.splines):
             if spline.type != "NURBS":
                 warnings.append(
                     f"Object '{curve_object.name}' spline {spline_index} is not NURBS and was skipped"
                 )
                 continue
-
+            
             if len(spline.points) < MIN_POINT_COUNT:
                 warnings.append(
                     f"Object '{curve_object.name}' spline {spline_index} has too few points and was skipped"
                 )
                 continue
-
+            
             points: list[SplineMakerPoint] = []
             for point in spline.points:
                 blender_x, blender_y, blender_z, w = point.co
@@ -503,7 +503,7 @@ def project_from_curve_objects(
                         weight=max(0.001, float(w)),
                     )
                 )
-
+            
             project.splines.append(
                 SplineMakerSpline(
                     points=points,
@@ -512,7 +512,7 @@ def project_from_curve_objects(
                     resolution_u=max(1, int(spline.resolution_u)),
                 )
             )
-
+    
     return project, warnings
 
 
@@ -525,7 +525,7 @@ def suggest_project_name(
         if project_name:
             return project_name
         return curve_objects[0].name
-
+    
     blend_path = getattr(context.blend_data, "filepath", "")
     if blend_path:
         return Path(blend_path).stem
@@ -555,18 +555,18 @@ class IMPORT_SCENE_OT_spline_maker_json(Operator, ImportHelper):
         description="Select and activate the imported curve object or objects after import",
         default=True,
     )
-
+    
     def _iter_filepaths(self) -> list[str]:
         if self.files:
             base_dir = Path(self.directory)
             return [str(base_dir / entry.name) for entry in self.files]
         return [self.filepath]
-
+    
     def execute(self, context: bpy.types.Context):
         filepaths = self._iter_filepaths()
         imported_objects = []
         all_warnings: list[str] = []
-
+        
         for filepath in filepaths:
             try:
                 project, warnings = load_project(filepath)
@@ -584,19 +584,19 @@ class IMPORT_SCENE_OT_spline_maker_json(Operator, ImportHelper):
             except Exception as exc:
                 self.report({"ERROR"}, f"SplineMaker import failed: {exc}")
                 return {"CANCELLED"}
-
+        
         if not imported_objects:
             _report_messages(self, {"WARNING"}, all_warnings)
             self.report({"ERROR"}, "No SplineMaker files were imported")
             return {"CANCELLED"}
-
+        
         if self.select_result:
             for obj in context.selected_objects:
                 obj.select_set(False)
             for obj in imported_objects:
                 obj.select_set(True)
             context.view_layer.objects.active = imported_objects[-1]
-
+        
         _report_messages(self, {"WARNING"}, all_warnings)
         self.report(
             {"INFO"},
@@ -609,10 +609,10 @@ class IMPORT_SCENE_OT_spline_maker_json(Operator, ImportHelper):
 class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
     bl_idname = "export_scene.spline_maker_json"
     bl_label = "Export SplineMaker JSON"
-
+    
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={"HIDDEN"})
-
+    
     source_mode: EnumProperty(
         name="Source Curves",
         description="Choose which curve objects should be exported",
@@ -625,28 +625,28 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
         ],
         default="AUTO",
     )
-
+    
     def invoke(self, context: bpy.types.Context, event):
         curve_objects = resolve_export_objects(context, self.source_mode)
         if not self.filepath:
             suggested_name = suggest_project_name(context, curve_objects)
             self.filepath = str(Path(bpy.path.abspath("//")) / f"{suggested_name}.json")
-
+        
         return ExportHelper.invoke(self, context, event)
-
+    
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
         layout.prop(self, "source_mode")
-
+    
     def execute(self, context: bpy.types.Context):
         try:
             curve_objects = resolve_export_objects(context, self.source_mode)
             if not curve_objects:
                 raise ValueError("No curve objects were found for export")
-
+            
             warnings: list[str] = []
             export_count = 0
-
+            
             if len(curve_objects) == 1:
                 output_paths = [(curve_objects[0], Path(self.filepath))]
             else:
@@ -661,7 +661,7 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
                     project_name = suggest_project_name(context, [curve_object])
                     safe_name = bpy.path.clean_name(project_name) or bpy.path.clean_name(curve_object.name)
                     output_paths.append((curve_object, export_dir / f"{safe_name}.json"))
-
+            
             for curve_object, output_path in output_paths:
                 project_name = Path(output_path).stem or suggest_project_name(context, [curve_object])
                 project, object_warnings = project_from_curve_objects(
@@ -673,16 +673,16 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
                     action_area_left=DEFAULT_ACTION_AREA_SIZE,
                     action_area_right=DEFAULT_ACTION_AREA_SIZE,
                 )
-
+                
                 if not project.splines:
                     warnings.append(f"{curve_object.name}: no valid NURBS splines were available for export")
                     continue
-
+                
                 save_project(str(output_path), project)
                 store_project_metadata(curve_object, project)
                 export_count += 1
                 warnings.extend([f"{curve_object.name}: {msg}" for msg in object_warnings])
-
+            
             if export_count == 0:
                 raise ValueError("No valid NURBS splines were available for export")
         except ValueError as exc:
@@ -691,10 +691,11 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
         except Exception as exc:
             self.report({"ERROR"}, f"SplineMaker export failed: {exc}")
             return {"CANCELLED"}
-
+        
         _report_messages(self, {"WARNING"}, warnings)
         self.report({"INFO"}, f"Exported {export_count} SplineMaker project file(s)")
         return {"FINISHED"}
+
 
 
 def menu_func_import(self, _context):

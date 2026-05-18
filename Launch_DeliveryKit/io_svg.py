@@ -478,7 +478,13 @@ class EXPORT_CURVE_OT_svg_bezier_nurbs(bpy.types.Operator, ExportHelper):
 
     filename_ext = ".svg"
     filter_glob: bpy.props.StringProperty(default="*.svg", options={"HIDDEN"})
-    tolerance: bpy.props.FloatProperty(name="NURBS Fit Tolerance", default=0.01, min=0.0001, precision=4)
+    tolerance: bpy.props.FloatProperty(
+        name="NURBS Fit Tolerance",
+        default=0.1,
+        min=0.0001,
+        max=1.0,
+        precision=4
+    )
     coordinate_scale: bpy.props.FloatProperty(
         name="Coordinate Scale",
         description="SVG units per Blender unit",
