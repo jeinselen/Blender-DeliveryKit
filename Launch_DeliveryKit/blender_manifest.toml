@@ -2,14 +2,14 @@ schema_version = "1.0.0"
 
 id = "Launch_Delivery_Kit"
 name = "Launch Delivery Kit"
-version = "0.0.6"
+version = "0.0.7"
 tagline = "Quickly export selections to a specified directory in a variety of formats"
 maintainer = "John Einselen <jeinselen@gmail.com>"
 website = "https://github.com/jeinselen/Blender-DeliveryKit"
 type = "add-on"
 
 # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
-tags = ["3D View", "Mesh", "Object", "Pipeline", "Scene"]
+tags = ["3D View", "Import-Export", "Mesh", "Object", "Pipeline", "Scene"]
 
 blender_version_min = "4.2.0"
 blender_version_max = "5.9.9"

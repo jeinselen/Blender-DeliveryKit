@@ -1,8 +1,5 @@
 import bpy
 from bpy.app.handlers import persistent
-import mathutils
-import struct
-import numpy as np
 import os
 import importlib
 
@@ -48,10 +45,6 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 	bl_label = "Deliver File"
 	bl_description = "Quickly export selected objects or collection to a specified directory"
 #	bl_options = {'REGISTER', 'UNDO'}
-	
-	def remap(self, val, start, stop):
-		val = (val - start) / (stop - start)
-		return val
 	
 	def execute(self, context):
 		settings = context.scene.delivery_kit_settings
@@ -514,167 +507,6 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				forward_axis = 'Y',
 				up_axis = 'Z',
 				apply_modifiers = True)
-		
-		
-		
-		# VOLUME (3D TEXTURE)
-		
-		elif format == "VF":
-			# Define the data to be saved
-			fourcc = "VF_V"  # Replace with the appropriate FourCC of either 'VF_F' for value or 'VF_V' for vec3
-			
-			# Name of the custom attribute
-			attribute_name = 'field_vector'
-			
-			# Get the active selected object
-			obj = bpy.context.object
-			
-			# Ensure the selected object is a mesh with equal to or fewer than 65536 vertices and the necessary properties and attributes
-			if obj and obj.type == 'MESH' and len(obj.data.vertices) <= 65536 and obj.data.get('vf_point_grid_x') is not None and obj.data.get('vf_point_grid_y') is not None and obj.data.get('vf_point_grid_z') is not None:
-				# Get evaluated object
-				obj = bpy.context.evaluated_depsgraph_get().objects.get(obj.name)
-				
-				# Check if named attribute exists
-				if attribute_name in obj.data.attributes:
-					# Create empty array
-					array = []
-					
-					# For each attribute entry, collect the results
-					for data in obj.data.attributes[attribute_name].data:
-						# Check if the attribute includes a value
-						if hasattr(data, 'value'):
-							array.append(data.value)
-						# Check if the attribute includes a vector
-						elif hasattr(data, 'vector'):
-							# Swizzle XZY order for Blender to Unity coordinate conversion
-							array.append((data.vector.x, data.vector.z, data.vector.y))
-						else:
-							print(f"Values not found in '{attribute_name}' attribute.")
-							return {'CANCELLED'}
-					
-					# Set array size using custom properties
-					size_x = obj.data["vf_point_grid_x"]
-					size_y = obj.data["vf_point_grid_z"] # Swizzle XZY order for Unity coordinate system
-					size_z = obj.data["vf_point_grid_y"] # Swizzle XZY order for Unity coordinate system
-					
-					# Calculate the stride based on the data type
-					is_float_data = fourcc[3] == 'F'
-					stride = 1 if is_float_data else 3
-					
-					# Create a new binary file for writing
-					with open(location + file_name + file_format, 'wb') as file:
-						# Write the FourCC
-						file.write(struct.pack('4s', fourcc.encode('utf-8')))
-						
-						# Write the volume size
-						file.write(struct.pack('HHH', size_x, size_y, size_z))
-						
-						# Write the data
-						for value in array:
-							if is_float_data:
-								file.write(struct.pack('f', value))
-							else:
-								file.write(struct.pack('fff', *value))
-				else:
-					print(f"Selected object does not contain '{attribute_name}' values.")
-					return {'CANCELLED'}
-				
-			else:
-				print(f"Selected object is not a mesh")
-				
-				# Cancel processing
-				return {'CANCELLED'}
-		
-		elif format == "PNG" or format == "EXR":
-			# Name of the custom attribute
-			attribute_name = 'field_vector'
-			
-			# Get the active selected object
-			obj = bpy.context.object
-			
-			# Ensure the selected object is a mesh with equal to or fewer than 65536 vertices and the necessary properties and attributes
-			# The actual limit for 3D textures in Unity is 2048 x 2048 x 2048 = 8,589,934,592
-			# However...that would result in an image over 4 million pixels wide, and I just don't want to deal with the ramifications of that right now
-			if obj and obj.type == 'MESH' and len(obj.data.vertices) <= 65536 and obj.data.get('vf_point_grid_x') is not None and obj.data.get('vf_point_grid_y') is not None and obj.data.get('vf_point_grid_z') is not None:
-				# Get evaluated object
-				obj = bpy.context.evaluated_depsgraph_get().objects.get(obj.name)
-				
-				# Check if named attribute exists
-				if attribute_name in obj.data.attributes:
-					# Get remapping values
-					start = settings.data_range[0]
-					stop = settings.data_range[1]
-					
-					# Create empty array
-					array = []
-					
-					# For each attribute entry, collect the results
-					for data in obj.data.attributes[attribute_name].data:
-						# Check if the attribute includes a value
-						if hasattr(data, 'value'):
-							# Instead of nested arrays, just create a flat list of values
-							val = self.remap(data.value, start, stop)
-							array.append(val)
-							array.append(val)
-							array.append(val)
-							array.append(1.0)
-						# Check if the attribute includes a vector
-						elif hasattr(data, 'vector'):
-							# Instead of nested arrays, just create a flat list of values
-							if format == 'PNG':
-								array.append(self.remap(data.vector.x, start, stop))
-								# Swizzle ZY order for Blender to Unity coordinate conversion
-								array.append(self.remap(data.vector.z, start, stop))
-								array.append(self.remap(data.vector.y, start, stop))
-							else:
-								array.append(data.vector.x)
-								# Swizzle ZY order for Blender to Unity coordinate conversion
-								array.append(data.vector.z)
-								array.append(data.vector.y)
-							array.append(1.0)
-						else:
-							print(f"Values not found in '{attribute_name}' attribute.")
-							return {'CANCELLED'}
-					
-					# Get output sizes using custom properties
-					grid_x = obj.data["vf_point_grid_x"]
-					grid_y = obj.data["vf_point_grid_y"]
-					grid_z = obj.data["vf_point_grid_z"]
-					
-					# Set image width (horizontal * depth) and height (vertical)
-					# Swizzle ZY order for Unity coordinate system
-					image_width = grid_x * grid_y
-					image_height = grid_z
-					
-					# Create image
-					image = bpy.data.images.new("3DtextureOutput", width=image_width, height=image_height, alpha=False, float_buffer=True, is_data=True)
-					
-					# Image content
-					# Swizzle ZY order for Unity coordinate system
-					array = np.array(array).reshape((grid_y, grid_z, grid_x, 4))
-					# Flip vertical axis
-					array = array[:,::-1,:]
-					# Rotate
-					array = np.rot90(array, axes=(0, 1))
-					# Flatten into string of colour values
-					image.pixels = array.flatten()
-					
-					# Save image
-					image.filepath_raw = location + file_name + file_format
-					if format == 'PNG':
-						image.file_format = 'PNG'
-					else:
-						image.file_format = 'OPEN_EXR'
-					image.save()
-				else:
-					print(f"Selected object does not contain '{attribute_name}' values.")
-					return {'CANCELLED'}
-			else:
-				print(f"Selected object is not a mesh")
-				return {'CANCELLED'}
-		
-		
-		
 		# DATA (CSV POINTS OR POSITIONS)
 			
 		elif format == "CSV":
@@ -732,28 +564,14 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			info_box = ''
 			show_anim = False
 			show_group = True
-			show_range = False
 			show_csv = False
 			show_csv_mode = False
 			object_count = 0
 			
 			# Check if at least one object is selected
 			if bpy.context.object and bpy.context.object.select_get():
-				# Volume Field: count only an active mesh with the necessary data elements
-				# Does not check for named attributes, however, since that requires applying all modifiers
-				if settings.file_type == "VF" or settings.file_type == "PNG" or settings.file_type == "EXR":
-					obj = bpy.context.object
-					# Validate object data (doesn't check if the geometry nodes modifier actually includes a named attribute)
-					if obj.type == 'MESH' and len(obj.data.vertices) <= 65536 and obj.data.get('vf_point_grid_x') is not None and obj.data.get('vf_point_grid_y') is not None and obj.data.get('vf_point_grid_z') is not None and ('field_vector' in obj.data.attributes or 'NODES' in [modifier.type for modifier in obj.modifiers]):
-						object_count = 1
-#						info_box = 'Volume export requires,"field_vector" attribute in,Geometry Node modifier'
-						if settings.file_type == "PNG" or settings.file_type == "EXR":
-							info_box = 'Columns: ' + str(obj.data["vf_point_grid_y"])
-					else:
-						info_box = 'Volume export requires:,mesh with <=65536 points,"vf_point_grid..." properties,"field_vector" attribute'
-				
 				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
-				elif settings.file_type == "CSV":
+				if settings.file_type == "CSV":
 					if settings.csv_mode == "POSITIONS":
 						object_count = len(bpy.context.selected_objects)
 					else:
@@ -781,11 +599,8 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 				# Button icon
 				button_icon = "OUTLINER_OB_MESH"
 			
-			
-			
-			# Active collection fallback (except for Volume Field)
-			elif not (settings.file_type == "VF" or settings.file_type == "PNG" or settings.file_type == "EXR"):
-				# Volume Field: requires an active mesh object, collections are not supported
+			# Active collection fallback
+			else:
 				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
 				if settings.file_type == "CSV":
 					if settings.csv_mode == "POSITIONS":
@@ -819,13 +634,6 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			if settings.file_type in ("USDA", "USDZ"):
 				show_anim = True
 			
-			if settings.file_type in ("VF", "PNG", "EXR"):
-				show_group = False
-				show_csv = False
-			
-			if settings.file_type == "PNG":
-				show_range = True
-			
 			if settings.file_type == "CSV":
 				show_group = True
 				show_csv_mode = True
@@ -843,9 +651,6 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			
 			if show_group:
 				layout.prop(settings, 'file_grouping', expand = True)
-			
-			if show_range:
-				layout.prop(settings, 'data_range')
 			
 			if show_csv_mode:
 				layout.prop(settings, 'csv_mode', expand = True)

@@ -1,13 +1,9 @@
 import bpy
-import os
 
 # Local imports
 from . import delivery_panel
 from . import io_csv
-#from . import io_csv_points
-#from . import io_csv_position
-#from . import io_volume_field
-#from . import io_volume_texture
+from . import io_curves
 
 
 
@@ -96,17 +92,6 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('INDIVIDUAL', 'Individual', 'Export selection as individual files')
 			],
 		default = 'COMBINED')
-	data_range: bpy.props.FloatVectorProperty(
-		name='Range',
-		description='Range of data to be normalised within 0-1 image values',
-		size=2,
-		default=(-1.0, 1.0),
-		step=1,
-		precision=2,
-		soft_min=-1.0,
-		soft_max= 1.0,
-		min=-1000.0,
-		max= 1000.0)
 	csv_mode: bpy.props.EnumProperty(
 		name = 'CSV Mode',
 		description = 'Sets the type of CSV data to export',
@@ -158,6 +143,7 @@ def register():
 	# Register Sub Modules
 	delivery_panel.register()
 	io_csv.register()
+	io_curves.register()
 
 	# Run preferences update
 	# DeliveryKitPreferences.update_delivery_category(self, context)
@@ -171,6 +157,7 @@ def unregister():
 	keymaps.clear()
 
 	# Remove Sub Modules
+	io_curves.unregister()
 	io_csv.unregister()
 	delivery_panel.unregister()
 
