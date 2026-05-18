@@ -3,7 +3,8 @@ import os
 
 # Local imports
 from . import delivery_panel
-from . import io_csv_points
+from . import io_csv
+#from . import io_csv_points
 #from . import io_csv_position
 #from . import io_volume_field
 #from . import io_volume_texture
@@ -69,13 +70,7 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			(None),
 			('STL', 'STL — 3D Printing', 'Export individual STL file of each selected object for 3D printing'),
 			(None),
-			('VF', 'VF — Unity 3D Volume Field', 'Export volume field for Unity 3D (best used with the VFX Graph)'),
-			('PNG', 'PNG — 3D Texture Strip', 'Export volume field as an image strip for Godot, Unity 3D, or Unreal Engine'),
-			('EXR', 'EXR — 3D Texture Strip', 'Export volume field as an image strip for Godot, Unity 3D, or Unreal Engine'),
-			(None),
-			('CSV-1', 'CSV — Item Position', 'Export CSV file of the selected object\'s position for all frames within the render range'),
-			('CSV-2', 'CSV — Point Position', 'Export CSV file of the selected object\'s points in object space'),
-			('CSV-3', 'CSV — Unity Coordinates', 'Export CSV file of the selected object\'s points in object XZY space')
+			('CSV', 'CSV — Data', 'Export CSV point or transform data')
 			],
 		default = 'FBX-1')
 	file_location: bpy.props.StringProperty(
@@ -112,6 +107,14 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 		soft_max= 1.0,
 		min=-1000.0,
 		max= 1000.0)
+	csv_mode: bpy.props.EnumProperty(
+		name = 'CSV Mode',
+		description = 'Sets the type of CSV data to export',
+		items = [
+			('POINTS', 'Points', 'Mesh vertex points'),
+			('POSITIONS', 'Positions', 'Object transform keyframes')
+			],
+		default = 'POINTS')
 	csv_position: bpy.props.EnumProperty(
 		name = 'Position',
 		description = 'Sets local or world space coordinates',
@@ -154,7 +157,7 @@ def register():
 
 	# Register Sub Modules
 	delivery_panel.register()
-	io_csv_points.register()
+	io_csv.register()
 
 	# Run preferences update
 	# DeliveryKitPreferences.update_delivery_category(self, context)
@@ -168,8 +171,8 @@ def unregister():
 	keymaps.clear()
 
 	# Remove Sub Modules
+	io_csv.unregister()
 	delivery_panel.unregister()
-	io_csv_points.unregister()
 
 	# Remove extension settings reference
 	del bpy.types.Scene.delivery_kit_settings

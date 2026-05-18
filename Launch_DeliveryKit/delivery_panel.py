@@ -64,6 +64,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		static = False if animation else True
 		combined = True if settings.file_grouping == "COMBINED" else False
 		active_object = bpy.context.active_object
+		filter_selection = format != "CSV" or settings.csv_mode == "POINTS"
 		
 		# Create directory if it doesn't exist yet
 		if not os.path.exists(location):
@@ -86,7 +87,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		if replaceVariables:
 			file_name = replaceVariables(file_name)
 		
-		if format != "CSV-1":
+		if filter_selection:
 			# Push an undo state (seems easier than trying to re-select previously selected non-mesh objects)
 			bpy.ops.ed.undo_push()
 			
@@ -674,69 +675,19 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		
 		
 		
-		# DATA (XYZ POSITIONS)
+		# DATA (CSV POINTS OR POSITIONS)
 			
-		elif format == "CSV-1":
-			# Save timeline position
-			frame_current = bpy.context.scene.frame_current
-			
-			# Set variables
-			frame_start = bpy.context.scene.frame_start
-			frame_end = bpy.context.scene.frame_end
-			space = settings.csv_position
-			
-			for obj in bpy.context.selected_objects:
-				# Collect data
-				array = [["x","y","z"]]
-				for i in range(frame_start, frame_end + 1):
-					bpy.context.scene.frame_set(i)
-					loc, rot, scale = obj.matrix_world.decompose() if space == "WORLD" else obj.matrix_local.decompose()
-					array.append([loc.x, loc.y, loc.z])
-				
-				# Save out CSV file
-				np.savetxt(
-					location + file_name + file_format,
-					array,
-					delimiter = ",",
-					newline = '\n',
-					fmt = '% s'
-					)
-			
-			# Reset timeline position
-			bpy.context.scene.frame_set(frame_current)
+		elif format == "CSV":
+			bpy.ops.export_scene.csv_data(
+				filepath = location + file_name + file_format,
+				mode = settings.csv_mode,
+				grouping = settings.file_grouping,
+				space = settings.csv_position,
+				channel_x = 'x',
+				channel_y = 'y',
+				channel_z = 'z')
 		
-		elif format == "CSV-2":
-			for obj in bpy.context.selected_objects:
-				# Get evaluated object
-				obj = bpy.context.evaluated_depsgraph_get().objects.get(obj.name)
-				
-				# Collect data with temporary mesh conversion
-				array = [["x","y","z"]]
-				for v in obj.to_mesh().vertices:
-					array.append([v.co.x, v.co.y, v.co.z])
-				
-				# Remove temporary mesh conversion
-				obj.to_mesh_clear()
-				
-				# Save out CSV file
-				np.savetxt(
-					location + file_name + file_format,
-					array,
-					delimiter = ",",
-					newline = '\n',
-					fmt = '% s'
-					)
-		
-		elif format == "CSV-3":
-			for obj in bpy.context.selected_objects:
-				bpy.ops.export_points.csv(
-					filepath = location + file_name + file_format,
-					channel_x = 'x',
-					channel_y = 'z',
-					channel_z = 'y',
-					relative_handles = True)
-		
-		if format != "CSV-1":
+		if filter_selection:
 			# Undo the previously completed non-mesh object deselection
 			bpy.ops.ed.undo()
 			
@@ -783,6 +734,7 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			show_group = True
 			show_range = False
 			show_csv = False
+			show_csv_mode = False
 			object_count = 0
 			
 			# Check if at least one object is selected
@@ -800,9 +752,12 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 					else:
 						info_box = 'Volume export requires:,mesh with <=65536 points,"vf_point_grid..." properties,"field_vector" attribute'
 				
-				# CSV: count any items
-				elif settings.file_type == "CSV-1":
-					object_count = len(bpy.context.selected_objects)
+				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
+				elif settings.file_type == "CSV":
+					if settings.csv_mode == "POSITIONS":
+						object_count = len(bpy.context.selected_objects)
+					else:
+						object_count = len([obj for obj in bpy.context.selected_objects if obj.type in delivery_object_types])
 				
 				# Geometry: count only supported meshes and curves that are not hidden
 				else:
@@ -811,7 +766,7 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 				
 				
 				# Button title
-				if (object_count > 1 and settings.file_grouping == "COMBINED" and not (settings.file_type == "CSV-1" or settings.file_type == "CSV-2")):
+				if object_count > 1 and settings.file_grouping == "COMBINED":
 					button_title = bpy.context.active_object.name + file_format
 				elif object_count == 1:
 					if bpy.context.active_object.type not in delivery_object_types and settings.file_grouping == "INDIVIDUAL":
@@ -831,15 +786,18 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			# Active collection fallback (except for Volume Field)
 			elif not (settings.file_type == "VF" or settings.file_type == "PNG" or settings.file_type == "EXR"):
 				# Volume Field: requires an active mesh object, collections are not supported
-				# CSV-1: count any items within the collection
-				if settings.file_type == "CSV-1":
-					object_count = len(bpy.context.collection.all_objects)
+				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
+				if settings.file_type == "CSV":
+					if settings.csv_mode == "POSITIONS":
+						object_count = len(bpy.context.collection.all_objects)
+					else:
+						object_count = len([obj for obj in bpy.context.collection.all_objects if obj.type in delivery_object_types])
 				# Geometry: count only supported data types (mesh, curve, etcetera) for everything else
 				else:
 					object_count = len([obj for obj in bpy.context.collection.all_objects if obj.type in delivery_object_types])
 				
 				# Button title
-				if settings.file_grouping == "COMBINED" and not (settings.file_type == "CSV-1" or settings.file_type == "CSV-2"):
+				if settings.file_grouping == "COMBINED":
 					button_title = bpy.context.collection.name + file_format
 				else:
 					button_title = str(object_count) + " files"
@@ -847,12 +805,12 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 				# Button icon
 				button_icon = "OUTLINER_COLLECTION"
 			
-			# If no usable items (CSV-1) or meshes (everything else) are found, disable the button
+			# If no usable items are found, disable the button
 			# Keeping the message generic allows this to be used universally
 			if object_count == 0:
 				button_enable = False
 				button_icon = "X"
-				if settings.file_type == "CSV-1":
+				if settings.file_type == "CSV" and settings.csv_mode == "POSITIONS":
 					button_title = "Select item"
 				else:
 					button_title = "Select mesh"
@@ -868,17 +826,10 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			if settings.file_type == "PNG":
 				show_range = True
 			
-			if settings.file_type == "CSV-1":
-				show_group = False
-				show_csv = True
-			
-			if settings.file_type == "CSV-2":
-				show_group = False
-				show_csv = False
-			
-			if settings.file_type == "CSV-3":
-				show_group = False
-				show_csv = True
+			if settings.file_type == "CSV":
+				show_group = True
+				show_csv_mode = True
+				show_csv = settings.csv_mode == "POSITIONS"
 			
 			# UI Layout
 			layout = self.layout
@@ -895,6 +846,9 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			
 			if show_range:
 				layout.prop(settings, 'data_range')
+			
+			if show_csv_mode:
+				layout.prop(settings, 'csv_mode', expand = True)
 			
 			if show_csv:
 				layout.prop(settings, 'csv_position', expand = True)
