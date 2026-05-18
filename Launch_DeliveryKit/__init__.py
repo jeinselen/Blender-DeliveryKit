@@ -4,6 +4,7 @@ import bpy
 from . import delivery_panel
 from . import io_csv
 from . import io_curves
+from . import io_splinemaker
 
 
 
@@ -144,6 +145,7 @@ def register():
 	delivery_panel.register()
 	io_csv.register()
 	io_curves.register()
+	io_splinemaker.register()
 
 	# Run preferences update
 	# DeliveryKitPreferences.update_delivery_category(self, context)
@@ -157,6 +159,7 @@ def unregister():
 	keymaps.clear()
 
 	# Remove Sub Modules
+	io_splinemaker.unregister()
 	io_curves.unregister()
 	io_csv.unregister()
 	delivery_panel.unregister()
