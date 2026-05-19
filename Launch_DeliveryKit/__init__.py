@@ -69,7 +69,7 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			(None),
 			('CSV-1', 'CSV — Points', 'Export vertex positions as CSV data'),
 			('CSV-2', 'CSV — Transforms', 'Export object transforms over time as CSV data'),
-			('JSON', 'JSON — SplineMaker', 'Export object transforms over time as CSV data'),
+			('JSON', 'JSON — SplineMaker', 'Export SplineMaker curve data as JSON'),
 			('SVG', 'SVG — Rive', 'Export Bézier, NURBS, and poly line curve objects as 2D vectors')
 			],
 		default = 'FBX-1')
@@ -96,14 +96,6 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('INDIVIDUAL', 'Individual', 'Export selection as individual files')
 			],
 		default = 'COMBINED')
-	csv_mode: bpy.props.EnumProperty(
-		name = 'CSV Mode',
-		description = 'Sets the type of CSV data to export',
-		items = [
-			('POINTS', 'Points', 'Mesh vertex points'),
-			('POSITIONS', 'Positions', 'Object transform keyframes')
-			],
-		default = 'POINTS')
 	csv_position: bpy.props.EnumProperty(
 		name = 'Position',
 		description = 'Sets local or world space coordinates',
@@ -112,14 +104,6 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('LOCAL', 'Local', 'Local object space')
 			],
 		default = 'WORLD')
-#	csv_rotation: bpy.props.EnumProperty(
-#		name = 'Rotation',
-#		description = 'Sets the formatting of rotation values',
-#		items = [
-#			('RAD', 'Radians', 'Output rotation in radians'),
-#			('DEG', 'Degrees', 'Output rotation in degrees')
-#			],
-#		default = 'RAD')
 
 
 

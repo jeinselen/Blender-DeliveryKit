@@ -3,12 +3,17 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import bpy
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper, ImportHelper
+
+try:
+    from .io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
+except ImportError:
+    from io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
 
 DEFAULT_OBJECT_NAME = "SplineMakerCurves"
 DEFAULT_PROJECT_VERSION = 1
@@ -351,50 +356,6 @@ def build_curve_object_from_project(
     return curve_object, warnings
 
 
-def _prioritize_objects(
-    objects: Iterable[bpy.types.Object],
-    active_object: bpy.types.Object | None,
-) -> list[bpy.types.Object]:
-    unique_objects = list(dict.fromkeys(objects))
-    if active_object in unique_objects:
-        unique_objects.remove(active_object)
-        unique_objects.insert(0, active_object)
-    return unique_objects
-
-
-def resolve_export_objects(
-    context: bpy.types.Context,
-    source_mode: str,
-) -> list[bpy.types.Object]:
-    active_object = context.active_object if context.active_object and context.active_object.type == "CURVE" else None
-    selected_objects = [obj for obj in context.selected_objects if obj.type == "CURVE"]
-    tagged_objects = [
-        obj for obj in context.scene.objects if obj.type == "CURVE" and bool(obj.get(PROP_MARKER))
-    ]
-    all_curve_objects = [obj for obj in context.scene.objects if obj.type == "CURVE"]
-    
-    if source_mode == "ACTIVE":
-        return [active_object] if active_object else []
-    if source_mode == "SELECTED":
-        return _prioritize_objects(selected_objects, active_object)
-    if source_mode == "TAGGED":
-        return _prioritize_objects(tagged_objects, active_object)
-    if source_mode == "ALL":
-        return _prioritize_objects(all_curve_objects, active_object)
-    if source_mode == "AUTO":
-        if active_object:
-            if selected_objects and active_object in selected_objects:
-                return _prioritize_objects(selected_objects, active_object)
-            return [active_object]
-        if selected_objects:
-            return _prioritize_objects(selected_objects, active_object)
-        if tagged_objects:
-            return _prioritize_objects(tagged_objects, active_object)
-        return _prioritize_objects(all_curve_objects, active_object)
-
-    raise ValueError(f"Unknown export source mode: {source_mode}")
-
-
 def read_project_metadata(
     curve_object: bpy.types.Object,
 ) -> SplineMakerProject:
@@ -613,21 +574,29 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={"HIDDEN"})
     
-    source_mode: EnumProperty(
-        name="Source Curves",
-        description="Choose which curve objects should be exported",
-        items=[
-            ("AUTO", "Auto", "Use the active curve, then selected curves, then tagged SplineMaker curves"),
-            ("ACTIVE", "Active", "Export only the active curve object"),
-            ("SELECTED", "Selected", "Export all selected curve objects"),
-            ("TAGGED", "Tagged", "Export curve objects previously imported from SplineMaker"),
-            ("ALL", "All Curves", "Export every curve object in the scene"),
-        ],
-        default="AUTO",
+    batch_mode: EnumProperty(
+        name="Batch Mode",
+        description="How multiple resolved curve objects are written",
+        items=EXPORT_BATCH_MODES,
+        default="OFF",
     )
-    
+    use_selection: BoolProperty(
+        name="Selected Objects",
+        description="Export selected curve objects only",
+        default=False,
+    )
+    use_active_collection: BoolProperty(
+        name="Active Collection",
+        description="Export curve objects from the active collection",
+        default=False,
+    )
+    collection: StringProperty(
+        name="Collection",
+        description="Export curve objects from this collection when set",
+        default="",
+    )
     def invoke(self, context: bpy.types.Context, event):
-        curve_objects = resolve_export_objects(context, self.source_mode)
+        curve_objects = self._resolve_curve_objects(context)
         if not self.filepath:
             suggested_name = suggest_project_name(context, curve_objects)
             self.filepath = str(Path(bpy.path.abspath("//")) / f"{suggested_name}.json")
@@ -636,36 +605,34 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
     
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        layout.prop(self, "source_mode")
+        layout.prop(self, "batch_mode")
+        layout.prop(self, "use_selection")
+        layout.prop(self, "use_active_collection")
+        layout.prop_search(self, "collection", bpy.data, "collections")
+    
+    def _resolve_curve_objects(self, context: bpy.types.Context) -> list[bpy.types.Object]:
+        return export_objects(
+            context,
+            {"CURVE"},
+            use_selection=self.use_selection,
+            use_active_collection=self.use_active_collection,
+            collection=self.collection,
+        )
     
     def execute(self, context: bpy.types.Context):
         try:
-            curve_objects = resolve_export_objects(context, self.source_mode)
+            curve_objects = self._resolve_curve_objects(context)
             if not curve_objects:
                 raise ValueError("No curve objects were found for export")
             
             warnings: list[str] = []
             export_count = 0
             
-            if len(curve_objects) == 1:
-                output_paths = [(curve_objects[0], Path(self.filepath))]
-            else:
-                base_path = Path(self.filepath)
-                export_dir = base_path if base_path.suffix.lower() != ".json" else base_path.parent
-                warnings.append(
-                    "Multiple objects selected; exporting one JSON file per object into '%s'"
-                    % str(export_dir)
-                )
-                output_paths = []
-                for curve_object in curve_objects:
-                    project_name = suggest_project_name(context, [curve_object])
-                    safe_name = bpy.path.clean_name(project_name) or bpy.path.clean_name(curve_object.name)
-                    output_paths.append((curve_object, export_dir / f"{safe_name}.json"))
-            
-            for curve_object, output_path in output_paths:
-                project_name = Path(output_path).stem or suggest_project_name(context, [curve_object])
+            if self.batch_mode == "OFF":
+                output_path = Path(self.filepath)
+                project_name = Path(output_path).stem or suggest_project_name(context, curve_objects)
                 project, object_warnings = project_from_curve_objects(
-                    [curve_object],
+                    curve_objects,
                     project_name=project_name,
                     source_path=str(output_path),
                     version=DEFAULT_PROJECT_VERSION,
@@ -673,15 +640,41 @@ class EXPORT_SCENE_OT_spline_maker_json(Operator, ExportHelper):
                     action_area_left=DEFAULT_ACTION_AREA_SIZE,
                     action_area_right=DEFAULT_ACTION_AREA_SIZE,
                 )
-                
                 if not project.splines:
-                    warnings.append(f"{curve_object.name}: no valid NURBS splines were available for export")
-                    continue
-                
+                    raise ValueError("No valid NURBS splines were available for export")
                 save_project(str(output_path), project)
-                store_project_metadata(curve_object, project)
-                export_count += 1
-                warnings.extend([f"{curve_object.name}: {msg}" for msg in object_warnings])
+                for curve_object in curve_objects:
+                    store_project_metadata(curve_object, project)
+                warnings.extend(object_warnings)
+                export_count = 1
+            else:
+                base_path = Path(self.filepath)
+                export_dir = base_path if base_path.suffix.lower() != ".json" else base_path.parent
+                if len(curve_objects) > 1:
+                    warnings.append(
+                        "Multiple objects selected; exporting one JSON file per object into '%s'"
+                        % str(export_dir)
+                    )
+                for curve_object in curve_objects:
+                    output_path = Path(object_export_path(str(export_dir), curve_object, self.filename_ext))
+                    project, object_warnings = project_from_curve_objects(
+                        [curve_object],
+                        project_name=output_path.stem,
+                        source_path=str(output_path),
+                        version=DEFAULT_PROJECT_VERSION,
+                        curve_smoothness=DEFAULT_CURVE_SMOOTHNESS,
+                        action_area_left=DEFAULT_ACTION_AREA_SIZE,
+                        action_area_right=DEFAULT_ACTION_AREA_SIZE,
+                    )
+                    
+                    if not project.splines:
+                        warnings.append(f"{curve_object.name}: no valid NURBS splines were available for export")
+                        continue
+                    
+                    save_project(str(output_path), project)
+                    store_project_metadata(curve_object, project)
+                    export_count += 1
+                    warnings.extend([f"{curve_object.name}: {msg}" for msg in object_warnings])
             
             if export_count == 0:
                 raise ValueError("No valid NURBS splines were available for export")

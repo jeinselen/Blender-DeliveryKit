@@ -9,6 +9,11 @@ import bpy
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 from mathutils import Matrix, Vector
 
+try:
+    from .io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
+except ImportError:
+    from io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
+
 
 EPS = 1.0e-9
 
@@ -478,6 +483,27 @@ class EXPORT_CURVE_OT_svg_bezier_nurbs(bpy.types.Operator, ExportHelper):
 
     filename_ext = ".svg"
     filter_glob: bpy.props.StringProperty(default="*.svg", options={"HIDDEN"})
+    batch_mode: bpy.props.EnumProperty(
+        name="Batch Mode",
+        description="How multiple resolved curve objects are written",
+        items=EXPORT_BATCH_MODES,
+        default="OFF",
+    )
+    use_selection: bpy.props.BoolProperty(
+        name="Selected Objects",
+        description="Export selected curve objects only",
+        default=True,
+    )
+    use_active_collection: bpy.props.BoolProperty(
+        name="Active Collection",
+        description="Export curve objects from the active collection",
+        default=False,
+    )
+    collection: bpy.props.StringProperty(
+        name="Collection",
+        description="Export curve objects from this collection when set",
+        default="",
+    )
     tolerance: bpy.props.FloatProperty(
         name="NURBS Fit Tolerance",
         default=0.1,
@@ -503,16 +529,41 @@ class EXPORT_CURVE_OT_svg_bezier_nurbs(bpy.types.Operator, ExportHelper):
         default="SCENE_ORIGIN",
     )
 
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "batch_mode")
+        layout.prop(self, "use_selection")
+        layout.prop(self, "use_active_collection")
+        layout.prop_search(self, "collection", bpy.data, "collections")
+        layout.prop(self, "tolerance")
+        layout.prop(self, "coordinate_scale")
+        layout.prop(self, "view_box_mode")
+
     def execute(self, context):
-        objects = [obj for obj in context.selected_objects if obj.type == "CURVE"]
-        if not objects and context.object and context.object.type == "CURVE":
-            objects = [context.object]
+        objects = export_objects(
+            context,
+            {"CURVE"},
+            use_selection=self.use_selection,
+            use_active_collection=self.use_active_collection,
+            collection=self.collection,
+        )
+        if not objects:
+            self.report({"ERROR"}, "No curve objects were found for export")
+            return {"CANCELLED"}
         try:
-            export_svg(self.filepath, objects, self.tolerance, self.coordinate_scale, self.view_box_mode)
+            if self.batch_mode == "OFF":
+                export_svg(self.filepath, objects, self.tolerance, self.coordinate_scale, self.view_box_mode)
+                export_count = 1
+            else:
+                export_count = 0
+                for obj in objects:
+                    output_path = object_export_path(self.filepath, obj, self.filename_ext)
+                    export_svg(output_path, [obj], self.tolerance, self.coordinate_scale, self.view_box_mode)
+                    export_count += 1
         except Exception as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Exported SVG: {os.path.basename(self.filepath)}")
+        self.report({"INFO"}, f"Exported {export_count} SVG file(s)")
         return {"FINISHED"}
 
 

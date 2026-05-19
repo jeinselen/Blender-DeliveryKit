@@ -5,15 +5,20 @@ import re
 import bpy
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
+try:
+	from .io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
+except ImportError:
+	from io_common import EXPORT_BATCH_MODES, export_objects, object_export_path
+
 
 CSV_MODES = (
 	('POINTS', 'Points', 'Import/export mesh vertex points'),
 	('POSITIONS', 'Positions', 'Import/export object transform keyframes'),
 )
 
-CSV_GROUPING = (
-	('INDIVIDUAL', 'Individual', 'Read or write one CSV per object'),
-	('COMBINED', 'Combined', 'Read or write all data through one CSV'),
+CSV_IMPORT_MODES = (
+	('SEPARATE', 'Separate', 'Read each CSV file as its own object or animation set'),
+	('COMBINED', 'Combined', 'Read all selected CSV files as one imported data set'),
 )
 
 CHANNELS = (
@@ -29,10 +34,6 @@ CHANNELS = (
 def clean_name(filepath):
 	name = os.path.splitext(os.path.basename(filepath))[0]
 	return name or "CSV Data"
-
-
-def selected_objects(context):
-	return list(context.selected_objects) if context.selected_objects else []
 
 
 def swizzle_value(vector, channel):
@@ -439,12 +440,12 @@ class IMPORT_SCENE_OT_csv_data(bpy.types.Operator, ImportHelper):
 	files: bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)
 	directory: bpy.props.StringProperty(subtype='DIR_PATH')
 	mode: bpy.props.EnumProperty(name="Mode", items=CSV_MODES, default='POINTS')
-	grouping: bpy.props.EnumProperty(name="Grouping", items=CSV_GROUPING, default='INDIVIDUAL')
+	import_mode: bpy.props.EnumProperty(name="Import Mode", items=CSV_IMPORT_MODES, default='SEPARATE')
 
 	def draw(self, context):
 		layout = self.layout
 		layout.prop(self, "mode", expand=True)
-		layout.prop(self, "grouping", expand=True)
+		layout.prop(self, "import_mode", expand=True)
 
 	def execute(self, context):
 		filepaths = [os.path.join(self.directory, item.name) for item in self.files] if self.files else [self.filepath]
@@ -455,13 +456,13 @@ class IMPORT_SCENE_OT_csv_data(bpy.types.Operator, ImportHelper):
 		try:
 			imported = []
 			if self.mode == 'POINTS':
-				if self.grouping == 'COMBINED':
+				if self.import_mode == 'COMBINED':
 					imported.append(import_points_combined(context, filepaths, clean_name(filepaths[0])))
 				else:
 					for filepath in filepaths:
 						imported.extend(import_points_file_split_objects(context, filepath))
 			else:
-				if self.grouping == 'COMBINED':
+				if self.import_mode == 'COMBINED':
 					imported.extend(import_positions_combined(context, filepaths))
 				else:
 					for filepath in filepaths:
@@ -486,7 +487,27 @@ class EXPORT_SCENE_OT_csv_data(bpy.types.Operator, ExportHelper):
 	filename_ext = ".csv"
 	filter_glob: bpy.props.StringProperty(default="*.csv", options={'HIDDEN'}, maxlen=255)
 	mode: bpy.props.EnumProperty(name="Mode", items=CSV_MODES, default='POINTS')
-	grouping: bpy.props.EnumProperty(name="Grouping", items=CSV_GROUPING, default='INDIVIDUAL')
+	batch_mode: bpy.props.EnumProperty(
+		name="Batch Mode",
+		description="How multiple resolved objects are written",
+		items=EXPORT_BATCH_MODES,
+		default='OFF',
+	)
+	use_selection: bpy.props.BoolProperty(
+		name="Selected Objects",
+		description="Export selected objects only",
+		default=False,
+	)
+	use_active_collection: bpy.props.BoolProperty(
+		name="Active Collection",
+		description="Export objects from the active collection",
+		default=False,
+	)
+	collection: bpy.props.StringProperty(
+		name="Collection",
+		description="Export objects from this collection when set",
+		default="",
+	)
 	space: bpy.props.EnumProperty(
 		name="Space",
 		items=(('WORLD', 'World', 'World space'), ('LOCAL', 'Local', 'Local object space')),
@@ -504,7 +525,10 @@ class EXPORT_SCENE_OT_csv_data(bpy.types.Operator, ExportHelper):
 	def draw(self, context):
 		layout = self.layout
 		layout.prop(self, "mode", expand=True)
-		layout.prop(self, "grouping", expand=True)
+		layout.prop(self, "batch_mode")
+		layout.prop(self, "use_selection")
+		layout.prop(self, "use_active_collection")
+		layout.prop_search(self, "collection", bpy.data, "collections")
 		if self.mode == 'POINTS':
 			layout.prop(self, "include_attributes")
 			channels = layout.grid_flow(row_major=True, columns=3, even_columns=True, even_rows=False, align=False)
@@ -521,38 +545,42 @@ class EXPORT_SCENE_OT_csv_data(bpy.types.Operator, ExportHelper):
 		return super().invoke(context, event)
 
 	def execute(self, context):
-		objects = selected_objects(context)
+		objects = export_objects(
+			context,
+			{'MESH'} if self.mode == 'POINTS' else {'CURVE', 'EMPTY', 'FONT', 'MESH', 'META', 'SURFACE'},
+			use_selection=self.use_selection,
+			use_active_collection=self.use_active_collection,
+			collection=self.collection,
+		)
 		if not objects:
-			self.report({'ERROR'}, "No objects selected.")
+			self.report({'ERROR'}, "No exportable objects found.")
 			return {'CANCELLED'}
 		try:
 			if self.mode == 'POINTS':
-				preferred = ['x', 'y', 'z'] if self.grouping == 'INDIVIDUAL' else ['object', 'x', 'y', 'z']
-				if self.grouping == 'COMBINED':
+				preferred = ['x', 'y', 'z'] if self.batch_mode == 'OBJECT' else ['object', 'x', 'y', 'z']
+				if self.batch_mode == 'OFF':
 					rows = []
 					for obj in objects:
 						rows.extend(points_rows_from_object(context, obj, self.channel_x, self.channel_y, self.channel_z, True, self.include_attributes))
 					headers = ordered_headers(rows, preferred)
 					write_csv_rows(self.filepath, headers, rows)
 				else:
-					output_dir = os.path.dirname(self.filepath)
 					for obj in objects:
-						filepath = self.filepath if len(objects) == 1 else os.path.join(output_dir, f"{bpy.path.clean_name(obj.name)}.csv")
+						filepath = object_export_path(self.filepath, obj, self.filename_ext)
 						rows = points_rows_from_object(context, obj, self.channel_x, self.channel_y, self.channel_z, False, self.include_attributes)
 						headers = ordered_headers(rows, preferred)
 						write_csv_rows(filepath, headers, rows)
 			else:
 				headers = ['frame', 'x', 'y', 'z', 'rotation_x', 'rotation_y', 'rotation_z', 'scale_x', 'scale_y', 'scale_z']
-				if self.grouping == 'COMBINED':
+				if self.batch_mode == 'OFF':
 					headers = ['object'] + headers
 					rows = []
 					for obj in objects:
 						rows.extend(position_rows_from_object(context, obj, True, self.space))
 					write_csv_rows(self.filepath, headers, rows)
 				else:
-					output_dir = os.path.dirname(self.filepath)
 					for obj in objects:
-						filepath = self.filepath if len(objects) == 1 else os.path.join(output_dir, f"{bpy.path.clean_name(obj.name)}.csv")
+						filepath = object_export_path(self.filepath, obj, self.filename_ext)
 						rows = position_rows_from_object(context, obj, False, self.space)
 						write_csv_rows(filepath, headers, rows)
 		except Exception as exc:

@@ -1,5 +1,4 @@
 import bpy
-from bpy.app.handlers import persistent
 import os
 import importlib
 
@@ -57,8 +56,40 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		animation = True if settings.file_animation == "ANIM" else False
 		static = False if animation else True
 		combined = True if settings.file_grouping == "COMBINED" else False
-		active_object = bpy.context.active_object
-		filter_selection = format != "CSV" or settings.csv_mode == "POINTS"
+		original_selection = list(bpy.context.selected_objects)
+		original_selection_names = [obj.name for obj in original_selection]
+		original_active_object = bpy.context.active_object
+		original_active_name = original_active_object.name if original_active_object else ""
+		active_object = original_active_object
+		if original_selection and active_object not in original_selection:
+			active_object = original_selection[0]
+			bpy.context.view_layer.objects.active = active_object
+		active_object_name = active_object.name if active_object else ""
+		object_mode = active_object.mode if active_object is not None else None
+		
+		def restore_export_state():
+			for obj in list(bpy.context.selected_objects):
+				obj.select_set(False)
+			for obj_name in original_selection_names:
+				obj = bpy.data.objects.get(obj_name)
+				if obj is not None:
+					obj.select_set(True)
+			if active_object_name and object_mode:
+				obj = bpy.data.objects.get(active_object_name)
+				if obj is not None:
+					bpy.context.view_layer.objects.active = obj
+					if obj.mode != object_mode:
+						bpy.ops.object.mode_set(mode = object_mode)
+			if original_active_name:
+				obj = bpy.data.objects.get(original_active_name)
+				if obj is not None:
+					bpy.context.view_layer.objects.active = obj
+		
+		def run_export(operator, message, **kwargs):
+			result = operator(**kwargs)
+			if 'FINISHED' not in result:
+				raise RuntimeError(message)
+			return result
 		
 		# Create directory if it doesn't exist yet
 		if not os.path.exists(location):
@@ -66,12 +97,15 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		
 		# Save then override the current mode to OBJECT
 		if active_object is not None:
-			object_mode = active_object.mode
 			bpy.ops.object.mode_set(mode = 'OBJECT')
 		
 		# Check if at least one object is selected, if not, convert selected collection into object selection
-		if bpy.context.object and bpy.context.object.select_get():
-			file_name = active_object.name
+		selected_objects = list(bpy.context.selected_objects)
+		if selected_objects:
+			if active_object in selected_objects:
+				file_name = active_object.name
+			else:
+				file_name = selected_objects[0].name
 		else:
 			file_name = bpy.context.collection.name
 			for obj in bpy.context.collection.all_objects:
@@ -81,10 +115,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		if replaceVariables:
 			file_name = replaceVariables(scene, file_name)
 		
-		if filter_selection:
-			# Push an undo state (seems easier than trying to re-select previously selected non-mesh objects)
-			bpy.ops.ed.undo_push()
-			
+		if format != "CSV-2":
 			# Deselect any non-mesh objects
 			for obj in bpy.context.selected_objects:
 				if obj.type not in delivery_object_types:
@@ -92,28 +123,25 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		
 ############################## START FILE PROCESSING LOOP ##############################
 		
-		if file_format in ".fbx.glb.gltf.obj.usda.usdz|.stl|.csv.json.svg":
-			# Push an undo state (easier than trying to re-select previously selected non-MESH objects?)
-			bpy.ops.ed.undo_push()
-			# Track number of undo steps to retrace after export is complete
-			undo_steps = 1
-			
+		try:
 			# Loop through each of the selected objects
 			# But only set individual selections if file export is set to individual
 			# Otherwise loop once and exit (see the if statement at the very end)
-			for obj in bpy.context.selected_objects:
+			for obj in list(bpy.context.selected_objects):
 				if not combined:
 					# deselect everything
-					for selobj in bpy.context.selected_objects:
+					for selobj in list(bpy.context.selected_objects):
 						selobj.select_set(False)
 					# select individual object
 					obj.select_set(True)
+					bpy.context.view_layer.objects.active = obj
+					bpy.context.view_layer.update()
 					file_name = obj.name
-					
+				
 					# Filter file name for variables using RenderKit function
 					if replaceVariables:
 						file_name = replaceVariables(scene, file_name)
-					
+				
 					# Note to future self; you probably missed the comment block just above. Please stop freaking out. When combined is true the loop is exited after the first export pass. You can stop frantically scrolling for multi-export errors, you'll just get to the end of this section and figure out the solution is already implemented. Again.
 				
 				
@@ -121,7 +149,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 ############################## MESH AND MATERIAL EXPORTS ##############################
 				
 				if "FBX" in format:
-					bpy.ops.export_scene.fbx(
+					run_export(bpy.ops.export_scene.fbx, "FBX export failed.",
 						filepath = location + file_name + file_format,
 						check_existing = False, # Always overwrite existing files
 						use_selection = True,
@@ -165,10 +193,10 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						batch_mode = 'OFF',
 						use_batch_own_dir = False,
 						use_metadata = True)
-					
+				
 				# Compressed GLB for ThreeJS
 				elif format == "GLB":
-					bpy.ops.export_scene.gltf(
+					run_export(bpy.ops.export_scene.gltf, "GLB export failed.",
 						filepath = location + file_name + file_format,
 						check_existing = False,
 						export_import_convert_lighting_mode = 'SPEC',
@@ -274,7 +302,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				
 				# GLTF export for Godot Engine
 				elif format == "GLTF":
-					bpy.ops.export_scene.gltf(
+					run_export(bpy.ops.export_scene.gltf, "GLTF export failed.",
 						filepath = location + file_name + file_format,
 						
 						# Following settings generated from sample export that may or may not work
@@ -386,10 +414,9 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						export_extra_animations = False,
 						export_loglevel = -1)
 				
-				
 				# OBJ export for Element 3D (likely deprecated soon, I don't think any of us use it anymore)
 				elif format == "OBJ":
-					bpy.ops.wm.obj_export(
+					run_export(bpy.ops.wm.obj_export, "OBJ export failed.",
 						filepath = location + file_name + file_format,
 						check_existing = False, # Always overwrite existing files
 						export_animation = False,
@@ -417,7 +444,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				# USDA for Nvidia Omniverse
 				# https://docs.blender.org/api/current/bpy.ops.wm.html#bpy.ops.wm.usd_export
 				elif format == "USDA":
-					bpy.ops.wm.usd_export(
+					run_export(bpy.ops.wm.usd_export, "USDA export failed.",
 						filepath = location + file_name + file_format,
 						check_existing = False, # Always overwrite existing files
 						
@@ -473,7 +500,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				
 				# USDZ for Apple Platforms
 				elif format == "USDZ":
-					bpy.ops.wm.usd_export(
+					run_export(bpy.ops.wm.usd_export, "USDZ export failed.",
 						filepath = location + file_name + file_format,
 						check_existing = False, # Changed from default
 						# Removed GUI options
@@ -498,7 +525,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				elif format == "STL":
 #					batch = False if combined else True
 #					output = location + file_name + file_format if combined else location
-					bpy.ops.wm.stl_export(
+					run_export(bpy.ops.wm.stl_export, "STL export failed.",
 #						filepath = output,
 						filepath = location + file_name + file_format,
 						check_existing = False, # Always overwrites existing files
@@ -522,20 +549,22 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				# CSV for Data Transport
 				
 				elif format == "CSV-1":
-					bpy.ops.export_scene.csv_data(
+					run_export(bpy.ops.export_scene.csv_data, "No exportable objects found.",
 						filepath = location + file_name + file_format,
 						mode = 'POINTS',
-						grouping = 'COMBINED',
+						use_selection = True,
+						batch_mode = 'OFF' if combined else 'OBJECT',
 						space = settings.csv_position,
 						channel_x = 'x',
 						channel_y = 'y',
 						channel_z = 'z')
-					
+				
 				elif format == "CSV-2":
-					bpy.ops.export_scene.csv_data(
+					run_export(bpy.ops.export_scene.csv_data, "CSV export failed.",
 						filepath = location + file_name + file_format,
 						mode = 'POSITIONS',
-						grouping = 'COMBINED',
+						use_selection = True,
+						batch_mode = 'OFF' if combined else 'OBJECT',
 						space = settings.csv_position,
 						channel_x = 'x',
 						channel_y = 'y',
@@ -544,37 +573,32 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				# JSON for SplineMaker
 				
 				elif format == "JSON":
-					bpy.ops.export_scene.spline_maker_json(
-						filepath = location + file_name + file_format)
+					run_export(bpy.ops.export_scene.spline_maker_json, "SplineMaker JSON export failed.",
+						filepath = location + file_name + file_format,
+						use_selection = True,
+						batch_mode = 'OFF' if combined else 'OBJECT')
 				
 				# SVG for Rive
 				
 				elif format == "SVG":
-					bpy.ops.export_curve.svg_bezier_nurbs(
+					run_export(bpy.ops.export_curve.svg_bezier_nurbs, "SVG export failed.",
 						filepath = location + file_name + file_format,
-						tolerance = 0.1,
-						coordinate_scale = 1000.0,
+						tolerance = 0.01,
+						coordinate_scale = 100.0,
 						view_box_mode = 'SCENE_ORIGIN')
-				
-				
-				
+			
+			
+			
 ############################## END FILE PROCESSING LOOP ##############################
-				
+			
 				# Interrupt the loop if we're exporting all objects to the same file
 				if combined:
 					break
 			
-			# Undo the previously completed object modifications
-			for i in range(undo_steps):
-				bpy.ops.ed.undo()
-		
-		if filter_selection:
-			# Undo the previously completed non-mesh object deselection
-			bpy.ops.ed.undo()
-		
-		# Reset to original mode
-		if active_object is not None:
-			bpy.ops.object.mode_set(mode = object_mode)
+		except RuntimeError:
+			return {'CANCELLED'}
+		finally:
+			restore_export_state()
 		
 		# Done
 		return {'FINISHED'}
@@ -614,17 +638,15 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			show_anim = False
 			show_group = True
 			show_csv = False
-			show_csv_mode = False
 			object_count = 0
 			
 			# Check if at least one object is selected
 			if bpy.context.object and bpy.context.object.select_get():
 				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
-				if settings.file_type == "CSV":
-					if settings.csv_mode == "POSITIONS":
-						object_count = len(bpy.context.selected_objects)
-					else:
-						object_count = len([obj for obj in bpy.context.selected_objects if obj.type in delivery_object_types])
+				if settings.file_type == "CSV-2":
+					object_count = len(bpy.context.selected_objects)
+				elif settings.file_type == "CSV-1":
+					object_count = len([obj for obj in bpy.context.selected_objects if obj.type in delivery_object_types])
 				
 				# Geometry: count only supported meshes and curves that are not hidden
 				else:
@@ -651,11 +673,10 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			# Active collection fallback
 			else:
 				# CSV Positions can use any object; CSV Points use evaluated mesh-compatible objects
-				if settings.file_type == "CSV":
-					if settings.csv_mode == "POSITIONS":
-						object_count = len(bpy.context.collection.all_objects)
-					else:
-						object_count = len([obj for obj in bpy.context.collection.all_objects if obj.type in delivery_object_types])
+				if settings.file_type == "CSV-2":
+					object_count = len(bpy.context.collection.all_objects)
+				elif settings.file_type == "CSV-1":
+					object_count = len([obj for obj in bpy.context.collection.all_objects if obj.type in delivery_object_types])
 				# Geometry: count only supported data types (mesh, curve, etcetera) for everything else
 				else:
 					object_count = len([obj for obj in bpy.context.collection.all_objects if obj.type in delivery_object_types])
@@ -674,7 +695,7 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			if object_count == 0:
 				button_enable = False
 				button_icon = "X"
-				if settings.file_type == "CSV" and settings.csv_mode == "POSITIONS":
+				if settings.file_type == "CSV-2":
 					button_title = "Select item"
 				else:
 					button_title = "Select mesh"
@@ -683,10 +704,9 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			if settings.file_type in ("USDA", "USDZ"):
 				show_anim = True
 			
-			if settings.file_type == "CSV":
+			if settings.file_type == "CSV-2":
 				show_group = True
-				show_csv_mode = True
-				show_csv = settings.csv_mode == "POSITIONS"
+				show_csv = True
 			
 			# UI Layout
 			layout = self.layout
@@ -700,9 +720,6 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			
 			if show_group:
 				layout.prop(settings, 'file_grouping', expand = True)
-			
-			if show_csv_mode:
-				layout.prop(settings, 'csv_mode', expand = True)
 			
 			if show_csv:
 				layout.prop(settings, 'csv_position', expand = True)
