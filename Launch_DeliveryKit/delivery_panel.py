@@ -21,12 +21,12 @@ def _get_renderkit_module():
 				break
 	return None
 
-def replaceVariables(string):
+def replaceVariables(scene, string):
 	rv_mod = _get_renderkit_module()
 	if not rv_mod or not hasattr(rv_mod, "replaceVariables"):
 		return string
 	try:
-		return rv_mod.replaceVariables(string)
+		return rv_mod.replaceVariables(scene, string)
 	except Exception as e:
 		print(f"[DeliveryKit] replaceVariables error: {e}")
 		return string
@@ -47,7 +47,8 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 #	bl_options = {'REGISTER', 'UNDO'}
 	
 	def execute(self, context):
-		settings = context.scene.delivery_kit_settings
+		scene = context.scene
+		settings = scene.delivery_kit_settings
 		
 		# Set up local variables
 		location = bpy.path.abspath(settings.file_location)
@@ -78,7 +79,7 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 		
 		# Filter file name for variables using RenderKit function
 		if replaceVariables:
-			file_name = replaceVariables(file_name)
+			file_name = replaceVariables(scene, file_name)
 		
 		if filter_selection:
 			# Push an undo state (seems easier than trying to re-select previously selected non-mesh objects)
@@ -89,10 +90,9 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				if obj.type not in delivery_object_types:
 					obj.select_set(False)
 		
+############################## START FILE PROCESSING LOOP ##############################
 		
-		
-		# MESH (REALTIME 3D)
-		if file_format in ".fbx.glb.obj.usda.usdz":
+		if file_format in ".fbx.glb.gltf.obj.usda.usdz|.stl|.csv.json.svg":
 			# Push an undo state (easier than trying to re-select previously selected non-MESH objects?)
 			bpy.ops.ed.undo_push()
 			# Track number of undo steps to retrace after export is complete
@@ -112,9 +112,13 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 					
 					# Filter file name for variables using RenderKit function
 					if replaceVariables:
-						file_name = replaceVariables(file_name)
+						file_name = replaceVariables(scene, file_name)
 					
 					# Note to future self; you probably missed the comment block just above. Please stop freaking out. When combined is true the loop is exited after the first export pass. You can stop frantically scrolling for multi-export errors, you'll just get to the end of this section and figure out the solution is already implemented. Again.
+				
+				
+				
+############################## MESH AND MATERIAL EXPORTS ##############################
 				
 				if "FBX" in format:
 					bpy.ops.export_scene.fbx(
@@ -272,30 +276,46 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 				elif format == "GLTF":
 					bpy.ops.export_scene.gltf(
 						filepath = location + file_name + file_format,
+						
+						# Following settings generated from sample export that may or may not work
+						# Very much early draft, not even WIP
 						check_existing = False,
 						export_import_convert_lighting_mode = 'SPEC',
 						gltf_export_id = '',
-						export_format = 'GLTF',
-#						export_copyright = '',
-						
-						# No compression
-						export_draco_mesh_compression_enable = False,
 						export_use_gltfpack = False,
-						
-						# Images
+						export_gltfpack_tc = True,
+						export_gltfpack_tq = 8,
+						export_gltfpack_si = 1.0,
+						export_gltfpack_sa = False,
+						export_gltfpack_slb = False,
+						export_gltfpack_vp = 14,
+						export_gltfpack_vt = 12,
+						export_gltfpack_vn = 8,
+						export_gltfpack_vc = 8,
+						export_gltfpack_vpi = 'Integer',
+						export_gltfpack_noq = True,
+						export_gltfpack_kn = False,
+						export_format = 'GLTF_SEPARATE',
+						ui_tab = 'GENERAL',
+						export_copyright = '',
 						export_image_format = 'AUTO',
-#						export_image_add_webp = False,
-#						export_image_webp_fallback = False,
-						export_texture_dir = 'Textures', # Need to figure out options/workflow for this
-#						export_jpeg_quality = 75,
-#						export_image_quality = 75,
+						export_image_add_webp = False,
+						export_image_webp_fallback = False,
+						export_texture_dir = '',
+						export_jpeg_quality = 75,
+						export_image_quality = 100,
 						export_keep_originals = False,
 						export_texcoords = True,
 						export_normals = True,
+						export_gn_mesh = True,
+						export_draco_mesh_compression_enable = False,
+						export_draco_mesh_compression_level = 6,
+						export_draco_position_quantization = 14,
+						export_draco_normal_quantization = 10,
+						export_draco_texcoord_quantization = 12,
+						export_draco_color_quantization = 10,
+						export_draco_generic_quantization = 12,
 						export_tangents = False,
-						
-						export_gn_mesh = True, # Experimental export of instances from Geometry Nodes
-						
 						export_materials = 'EXPORT',
 						export_unused_images = False,
 						export_unused_textures = False,
@@ -303,35 +323,29 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						export_vertex_color_name = 'Color',
 						export_all_vertex_colors = True,
 						export_active_vertex_color_when_no_material = True,
-						
-						export_attributes = True, # Useful in cases where Godot Engine ingests additional properties or attributes
-						use_mesh_edges = False, # Do not include 2-point poly lines
-						use_mesh_vertices = False, # Do not include 1-point vertices
-						
-						export_cameras = False,
+						export_attributes = True,
+						use_mesh_edges = True,
+						use_mesh_vertices = True,
+						export_cameras = True,
 						use_selection = True,
-						use_visible = False, # Includes invisible objects
+						use_visible = False,
 						use_renderable = False,
-						
-						use_active_collection = False, # Do not use active collection, collections are already converted to selections
 						use_active_collection_with_nested = True,
+						use_active_collection = False,
 						use_active_scene = False,
+						collection = '',
 						at_collection_center = False,
-						
-						export_extras = True, # Includes item properties for use in more advanced Godot production pipelines
+						export_extras = True,
 						export_yup = True,
-						
-						export_apply = static, # Should be turned on for NON ANIMATED outputs
+						export_apply = True,
 						export_shared_accessors = False,
-						
-						export_animations = animation,
-						export_frame_range = True,
+						export_animations = True,
+						export_frame_range = False,
 						export_frame_step = 1,
 						export_force_sampling = True,
 						export_sampling_interpolation_fallback = 'LINEAR',
 						export_pointer_animation = False,
-						export_animation_mode = 'ACTIONS', # This may work better as NLA strips, according to this guide:
-							#https://supermatrix.studio/blog/best-workflow-for-exporting-animated-characters-from-blender-to-godot
+						export_animation_mode = 'NLA_TRACKS',
 						export_nla_strips_merged_animation_name = 'Animation',
 						export_def_bones = False,
 						export_hierarchy_flatten_bones = False,
@@ -359,10 +373,10 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						export_morph_tangent = False,
 						export_morph_animation = True,
 						export_morph_reset_sk_data = True,
-						export_lights = False,
+						export_lights = True,
 						export_try_sparse_sk = True,
 						export_try_omit_sparse_sk = False,
-						export_gpu_instances = False,
+						export_gpu_instances = True,
 						export_action_filter = False,
 						export_convert_animation_pointer = False,
 						export_nla_strips = True,
@@ -370,8 +384,8 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						will_save_settings = False,
 						export_hierarchy_full_collections = False,
 						export_extra_animations = False,
-						export_loglevel = -1,
-						filter_glob = '*.glb')
+						export_loglevel = -1)
+				
 				
 				# OBJ export for Element 3D (likely deprecated soon, I don't think any of us use it anymore)
 				elif format == "OBJ":
@@ -464,7 +478,6 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						check_existing = False, # Changed from default
 						# Removed GUI options
 						selected_objects_only = True, # Changed from default
-						visible_objects_only = True,
 						export_animation = False, # May need to add an option for enabling animation exports depending on the project
 						export_hair = False,
 						export_uvmaps = True, # Need to test this: USD uses "st" as the default uv map name, and the exporter apparently doesn't convert Blender's default "UVmap" automatically?
@@ -473,9 +486,79 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						use_instancing = False,
 						evaluation_mode = 'RENDER',
 						generate_preview_surface = True,
-						export_textures = True,
-						overwrite_textures = True, # Changed from default
+#						export_textures = True,
+#						overwrite_textures = True, # Changed from default
 						relative_paths = True)
+				
+				
+				
+############################## MESH ONLY EXPORTS ##############################
+				
+				# STL for 3D Printing
+				elif format == "STL":
+#					batch = False if combined else True
+#					output = location + file_name + file_format if combined else location
+					bpy.ops.wm.stl_export(
+#						filepath = output,
+						filepath = location + file_name + file_format,
+						check_existing = False, # Always overwrites existing files
+						
+						ascii_format = False,
+#						use_batch = batch,
+						use_batch = False,
+						export_selected_objects = True,
+						
+						global_scale = 1000.0, # Exports the correct scale (converting from 0.001m to 1.0mm) to Cura, Orca, and Bambu Studio slicers
+						use_scene_unit = False,
+						
+						forward_axis = 'Y',
+						up_axis = 'Z',
+						apply_modifiers = True)
+				
+				
+				
+############################## MESH DATA EXPORTS ##############################
+				
+				# CSV for Data Transport
+				
+				elif format == "CSV-1":
+					bpy.ops.export_scene.csv_data(
+						filepath = location + file_name + file_format,
+						mode = 'POINTS',
+						grouping = 'COMBINED',
+						space = settings.csv_position,
+						channel_x = 'x',
+						channel_y = 'y',
+						channel_z = 'z')
+					
+				elif format == "CSV-2":
+					bpy.ops.export_scene.csv_data(
+						filepath = location + file_name + file_format,
+						mode = 'POSITIONS',
+						grouping = 'COMBINED',
+						space = settings.csv_position,
+						channel_x = 'x',
+						channel_y = 'y',
+						channel_z = 'z')
+				
+				# JSON for SplineMaker
+				
+				elif format == "JSON":
+					bpy.ops.export_scene.spline_maker_json(
+						filepath = location + file_name + file_format)
+				
+				# SVG for Rive
+				
+				elif format == "SVG":
+					bpy.ops.export_curve.svg_bezier_nurbs(
+						filepath = location + file_name + file_format,
+						tolerance = 0.1,
+						coordinate_scale = 1000.0,
+						view_box_mode = 'SCENE_ORIGIN')
+				
+				
+				
+############################## END FILE PROCESSING LOOP ##############################
 				
 				# Interrupt the loop if we're exporting all objects to the same file
 				if combined:
@@ -484,62 +567,6 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 			# Undo the previously completed object modifications
 			for i in range(undo_steps):
 				bpy.ops.ed.undo()
-		
-		
-		
-		# MESH (3D PRINTING)
-		
-		elif format == "STL":
-#			batch = 'OFF' if combined else 'OBJECT'
-			batch = False if combined else True
-			output = location + file_name + file_format if combined else location
-			bpy.ops.wm.stl_export(
-				filepath = output,
-				check_existing = False, # Always overwrites existing files
-				
-				ascii_format = False,
-				use_batch = batch, # This might be used incorrectly?
-				export_selected_objects = True,
-				
-				global_scale = 1000.0, # Exports the correct scale (converting from 0.001m to 1.0mm) to Cura, Orca, and Bambu Studio slicers
-				use_scene_unit = False,
-				
-				forward_axis = 'Y',
-				up_axis = 'Z',
-				apply_modifiers = True)
-		
-		# DATA (CSV POINTS OR TRASNFORMS, SPLINEMAKER JSON, SVG CURVES)
-			
-		elif format == "CSV-1":
-			bpy.ops.export_scene.csv_data(
-				filepath = location + file_name + file_format,
-				mode = 'POINTS',
-				grouping = 'INDIVIDUAL',
-				space = settings.csv_position,
-				channel_x = 'x',
-				channel_y = 'y',
-				channel_z = 'z')
-		
-		elif format == "CSV-2":
-			bpy.ops.export_scene.csv_data(
-				filepath = location + file_name + file_format,
-				mode = 'POSITIONS',
-				grouping = 'INDIVIDUAL',
-				space = settings.csv_position,
-				channel_x = 'x',
-				channel_y = 'y',
-				channel_z = 'z')
-		
-		elif format == "JSON":
-			bpy.ops.export_scene.spline_maker_json(
-				filepath = location + file_name + file_format)
-		
-		elif format == "SVG":
-			bpy.ops.export_curve.svg_bezier_nurbs(
-				filepath = location + file_name + file_format,
-				tolerance = 0.1,
-				coordinate_scale = 1000.0,
-				view_box_mode = 'SCENE_ORIGIN')
 		
 		if filter_selection:
 			# Undo the previously completed non-mesh object deselection
