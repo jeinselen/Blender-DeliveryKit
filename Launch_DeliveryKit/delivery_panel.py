@@ -610,7 +610,7 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 	bl_space_type = "VIEW_3D"
 	bl_region_type = "UI"
 	bl_category = 'Launch'
-	bl_order = 0
+	bl_order = 10
 	bl_options = {'DEFAULT_CLOSED'}
 	bl_label = "Delivery"
 	bl_idname = "DELIVERYKIT_PT_delivery"
