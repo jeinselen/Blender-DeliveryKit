@@ -5,6 +5,7 @@ from . import delivery_panel
 from . import io_csv
 from . import io_svg
 from . import io_splinemaker
+from . import utility_panel
 
 
 
@@ -13,39 +14,31 @@ from . import io_splinemaker
 
 class DeliveryKitPreferences(bpy.types.AddonPreferences):
 	bl_idname = __package__
-
+	
 	########## Delivery Panel Location ##########
-
+	
 	def update_delivery_category(self, context):
-		category = bpy.context.preferences.addons[__package__].preferences.delivery_category
-		try:
-			bpy.utils.unregister_class(delivery_panel.DELIVERYKIT_PT_delivery)
-		except RuntimeError:
-			pass
-		if len(category) > 0:
-			delivery_panel.DELIVERYKIT_PT_delivery.bl_category = category
-			bpy.utils.register_class(delivery_panel.DELIVERYKIT_PT_delivery)
-
+		utility_panel.register_panels(delivery_panel.panels)
+	
 	delivery_category: bpy.props.StringProperty(
-		name="Delivery Panel",
-		description="Choose a category for the panel to be placed in",
+		name="3D View",
+		description="Choose a 3D view tab category for the panel to be placed in, or leave empty to hide the panel",
 		default="Launch",
 		update=update_delivery_category)
 		# Consider adding search_options=(list of currently available tabs) for easier operation
-
-
-
+	
+	
+	
 	############################## Preferences UI ##############################
-
+	
 	# User Interface
 	def draw(self, context):
-		settings = context.scene.delivery_kit_settings
-
 		layout = self.layout
-
+		
 		########## Delivery Panel ##########
-		layout.label(text="Delivery Interface", icon="FILE") # FILE CURRENT_FILE FILE_BLEND DUPLICATE
-		layout.prop(self, "delivery_category", text='Sidebar Tab')
+		titlegrid = layout.grid_flow(row_major=True, columns=2, even_columns=True, even_rows=True, align=False)
+		titlegrid.label(text="Delivery Interface", icon="FILE") # FILE CURRENT_FILE FILE_BLEND DUPLICATE
+		titlegrid.prop(self, "delivery_category", text="", icon="VIEW3D")
 
 
 
@@ -134,9 +127,6 @@ def register():
 	io_svg.register()
 	io_splinemaker.register()
 
-	# Run preferences update
-	# DeliveryKitPreferences.update_delivery_category(self, context)
-
 
 
 def unregister():
@@ -162,5 +152,3 @@ def unregister():
 
 if __package__ == "__main__":
 	register()
-	
-	

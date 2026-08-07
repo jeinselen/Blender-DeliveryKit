@@ -2,6 +2,8 @@ import bpy
 import os
 import importlib
 
+from . import utility_panel
+
 
 
 ###########################################################################
@@ -614,7 +616,8 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 	bl_options = {'DEFAULT_CLOSED'}
 	bl_label = "Delivery"
 	bl_idname = "DELIVERYKIT_PT_delivery"
-	
+	category_preference = "delivery_category"
+
 	@classmethod
 	def poll(cls, context):
 		return True
@@ -748,7 +751,10 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 # •Registration function
 # •Unregistration function
 			
-classes = (DELIVERYKIT_OT_output, DELIVERYKIT_PT_delivery,)
+classes = (DELIVERYKIT_OT_output,)
+
+# Registered from the tab category set in the extension preferences
+panels = [DELIVERYKIT_PT_delivery]
 
 keymaps = []
 
@@ -758,7 +764,10 @@ def register():
 	# Register classes
 	for cls in classes:
 		bpy.utils.register_class(cls)
-	
+
+	# Register panels
+	utility_panel.register_panels(panels)
+
 	# Add keymaps for quick export
 	wm = bpy.context.window_manager
 	kc = wm.keyconfigs.addon
@@ -780,14 +789,21 @@ def unregister():
 	for km, kmi in keymaps:
 		km.keymap_items.remove(kmi)
 	keymaps.clear()
-	
+
+	# Unregister panels
+	utility_panel.unregister_panels(panels)
+
 	# Deregister classes
 	for cls in reversed(classes):
 		bpy.utils.unregister_class(cls)
 
 
 
-if __package__ == "__main__":
+if __name__ == "__main__":
+	try:
+		unregister()
+	except Exception:
+		pass
 	register()
 	
 	
