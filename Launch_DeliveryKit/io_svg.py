@@ -590,6 +590,69 @@ def reflect(point, around):
     return (2.0 * around[0] - point[0], 2.0 * around[1] - point[1])
 
 
+def arc_to_cubic_segments(start, end, rx, ry, rotation, large_arc, sweep):
+    """Convert one SVG endpoint-parameterized elliptical arc to cubic segments."""
+    rx, ry = abs(float(rx)), abs(float(ry))
+    if rx < EPS or ry < EPS or is_same_point(start, end):
+        p0, p3 = svg_to_blender(start), svg_to_blender(end)
+        return [(p0, vlerp(p0, p3, 1 / 3), vlerp(p0, p3, 2 / 3), p3)]
+    phi = math.radians(float(rotation) % 360.0)
+    cos_phi, sin_phi = math.cos(phi), math.sin(phi)
+    dx, dy = (start[0] - end[0]) * 0.5, (start[1] - end[1]) * 0.5
+    x1 = cos_phi * dx + sin_phi * dy
+    y1 = -sin_phi * dx + cos_phi * dy
+    radii = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry)
+    if radii > 1.0:
+        scale = math.sqrt(radii)
+        rx, ry = rx * scale, ry * scale
+    numerator = max(0.0, rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1)
+    denominator = max(EPS, rx * rx * y1 * y1 + ry * ry * x1 * x1)
+    factor = (-1.0 if bool(large_arc) == bool(sweep) else 1.0) * math.sqrt(numerator / denominator)
+    cx1 = factor * (rx * y1 / ry)
+    cy1 = factor * (-ry * x1 / rx)
+    center = (
+        cos_phi * cx1 - sin_phi * cy1 + (start[0] + end[0]) * 0.5,
+        sin_phi * cx1 + cos_phi * cy1 + (start[1] + end[1]) * 0.5,
+    )
+
+    def angle(u, v):
+        return math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])
+
+    initial = ((x1 - cx1) / rx, (y1 - cy1) / ry)
+    final = ((-x1 - cx1) / rx, (-y1 - cy1) / ry)
+    theta = math.atan2(initial[1], initial[0])
+    delta = angle(initial, final)
+    if not sweep and delta > 0.0:
+        delta -= math.tau
+    elif sweep and delta < 0.0:
+        delta += math.tau
+    count = max(1, int(math.ceil(abs(delta) / (math.pi * 0.5))))
+    step = delta / count
+
+    def point_and_derivative(value):
+        cos_t, sin_t = math.cos(value), math.sin(value)
+        point = (
+            center[0] + cos_phi * rx * cos_t - sin_phi * ry * sin_t,
+            center[1] + sin_phi * rx * cos_t + cos_phi * ry * sin_t,
+        )
+        derivative = (
+            -cos_phi * rx * sin_t - sin_phi * ry * cos_t,
+            -sin_phi * rx * sin_t + cos_phi * ry * cos_t,
+        )
+        return point, derivative
+
+    segments = []
+    for index in range(count):
+        a, b = theta + index * step, theta + (index + 1) * step
+        p0, d0 = point_and_derivative(a)
+        p3, d3 = point_and_derivative(b)
+        handle = 4.0 / 3.0 * math.tan(step * 0.25)
+        p1 = (p0[0] + handle * d0[0], p0[1] + handle * d0[1])
+        p2 = (p3[0] - handle * d3[0], p3[1] - handle * d3[1])
+        segments.append(tuple(svg_to_blender(point) for point in (p0, p1, p2, p3)))
+    return segments
+
+
 def parse_path_data(d):
     tokens = TOKEN_RE.findall(d.replace(",", " "))
     paths = []
@@ -702,7 +765,19 @@ def parse_path_data(d):
                 current = target
             continue
         if c == "A":
-            raise ValueError("SVG arc commands are not supported; convert arcs to paths first")
+            if sub.kind == "POLY":
+                promote_to_bezier()
+            while i < len(tokens) and not re.match(r"^[A-Za-z]$", tokens[i]):
+                rx, i = parse_float(tokens, i)
+                ry, i = parse_float(tokens, i)
+                rotation, i = parse_float(tokens, i)
+                large_arc, i = parse_float(tokens, i)
+                sweep, i = parse_float(tokens, i)
+                target = next_point()
+                sub.segments.extend(arc_to_cubic_segments(current, target, rx, ry, rotation, large_arc, sweep))
+                current = target
+            last_cubic = last_quad = None
+            continue
     close_subpath()
     return paths
 
