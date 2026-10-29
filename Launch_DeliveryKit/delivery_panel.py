@@ -580,14 +580,23 @@ class DELIVERYKIT_OT_output(bpy.types.Operator):
 						use_selection = True,
 						batch_mode = 'OFF' if combined else 'OBJECT')
 				
-				# SVG for Rive
+				# SVG curves
 				
-				elif format == "SVG":
+				elif format == "SVG-CURVE":
 					run_export(bpy.ops.export_curve.svg_bezier_nurbs, "SVG export failed.",
 						filepath = location + file_name + file_format,
 						tolerance = 0.01,
 						coordinate_scale = 100.0,
 						view_box_mode = 'SCENE_ORIGIN')
+
+				elif format in {"SVG-UV", "SVG-MESH"}:
+					run_export(bpy.ops.export_mesh.svg_vectors, "SVG mesh export failed.",
+						filepath = location + file_name + file_format,
+						source = 'UV' if format == "SVG-UV" else 'MESH',
+						projection = 'VIEW',
+						merge_islands = settings.svg_merge_islands,
+						coordinate_scale = 100.0,
+						batch_mode = 'OFF')
 			
 			
 			
@@ -726,6 +735,9 @@ class DELIVERYKIT_PT_delivery(bpy.types.Panel):
 			
 			if show_csv:
 				layout.prop(settings, 'csv_position', expand = True)
+
+			if settings.file_type in {"SVG-UV", "SVG-MESH"}:
+				layout.prop(settings, 'svg_merge_islands')
 			
 			if button_enable:
 				layout.operator(DELIVERYKIT_OT_output.bl_idname, text = button_title, icon = button_icon)

@@ -10,6 +10,8 @@
   
   - SVG Curves — translation between Blender curves and SVG vectors
     - Includes conversion between Bézier and NURBS formats within Blender
+
+  - SVG Mesh — import filled SVG artwork as layered mesh islands; export evaluated mesh projections or active UV maps as polygon paths or merged island silhouettes
   
   - SplineMaker JSON — project import/export for VR curve editing of NURBS splines
     - [Experience for Meta Quest 3](https://github.com/jeinselen/Godot-SplineMaker)
@@ -24,9 +26,11 @@
   - STL — 3D printing (per-object)
   - CSV — vertex points or object transforms over time
   - JSON — SplineMaker curve data
-  - SVG — Bézier, NURBS, and poly line curves as 2D vectors
+  - SVG Curve — Bézier, NURBS, and poly line curves as 2D vectors
+  - SVG Mesh — evaluated mesh and active UV layouts using current 3D View projection
+  - SVG UV — active UV layout
   - Combined or individual files, static or animated output, and a keyboard shortcut (Shift+Alt+Cmd/Ctrl+E)
-
+  
   ![Screenshot-Export](images/Screenshot-Export.png)
 
 

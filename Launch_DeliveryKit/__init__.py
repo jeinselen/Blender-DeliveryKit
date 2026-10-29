@@ -3,7 +3,8 @@ import bpy
 # Local imports
 from . import delivery_panel
 from . import io_csv
-from . import io_svg
+from . import io_svg_curve
+from . import io_svg_mesh
 from . import io_splinemaker
 from . import utility_panel
 
@@ -63,7 +64,9 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('CSV-1', 'CSV — Points', 'Export vertex positions as CSV data'),
 			('CSV-2', 'CSV — Transforms', 'Export object transforms over time as CSV data'),
 			('JSON', 'JSON — SplineMaker', 'Export SplineMaker curve data as JSON'),
-			('SVG', 'SVG — Rive', 'Export Bézier, NURBS, and poly line curve objects as 2D vectors')
+			('SVG-CURVE', 'SVG — Curve', 'Export Bézier, NURBS, and poly line curve objects as 2D vectors'),
+			('SVG-MESH', 'SVG — Mesh', 'Export evaluated meshes using the active 3D view'),
+			('SVG-UV', 'SVG — UV', 'Export active UV maps from evaluated meshes')
 			],
 		default = 'FBX-1')
 	file_location: bpy.props.StringProperty(
@@ -97,6 +100,10 @@ class DeliveryKitSettings(bpy.types.PropertyGroup):
 			('LOCAL', 'Local', 'Local object space')
 			],
 		default = 'WORLD')
+	svg_merge_islands: bpy.props.BoolProperty(
+		name = 'Merge Islands',
+		description = 'Export the union silhouette of each mesh or UV island',
+		default = False)
 
 
 
@@ -124,7 +131,8 @@ def register():
 	# Register Sub Modules
 	delivery_panel.register()
 	io_csv.register()
-	io_svg.register()
+	io_svg_curve.register()
+	io_svg_mesh.register()
 	io_splinemaker.register()
 
 
@@ -137,7 +145,8 @@ def unregister():
 
 	# Remove Sub Modules
 	io_splinemaker.unregister()
-	io_svg.unregister()
+	io_svg_mesh.unregister()
+	io_svg_curve.unregister()
 	io_csv.unregister()
 	delivery_panel.unregister()
 
@@ -152,3 +161,4 @@ def unregister():
 
 if __name__ == "__main__":
 	register()
+	
