@@ -6,12 +6,12 @@
 
 - File I/O for custom data formats:
   
-  - CSV — either all points within a mesh or transforms over time
+  - CSV — all points within a mesh or translation over time
   
-  - SVG Curves — translation between Blender curves and SVG vectors
-    - Includes conversion between Bézier and NURBS formats within Blender
+  - SVG Curves — conversion between Blender curves and SVG vectors
+    - Includes standalone Bézier <> NURBS conversion operators (`Curve > Derive Bezier from NURBS`, `Curve > Derive NURBS from Bezier`)
 
-  - SVG Mesh — import filled SVG artwork as layered mesh islands; export evaluated mesh projections or active UV maps as polygon paths or merged island silhouettes
+  - SVG Mesh — import filled SVG artwork as layered mesh islands, export evaluated mesh projections or active UV maps as polygon paths or merged island silhouettes
   
   - SplineMaker JSON — project import/export for VR curve editing of NURBS splines
     - [Experience for Meta Quest 3](https://github.com/jeinselen/Godot-SplineMaker)
@@ -33,14 +33,18 @@
   
   ![Screenshot-Export](images/Screenshot-Export.png)
 
+- Configurable panel location; set the 3D View tab category in the add-on preferences, or leave empty to hide the panel (useful if you want to keep the I/O plugins without using the export presets)
+
+  ![Screenshot-Preferences](images/Screenshot-Preferences.png)
+
 
 
 ## Installation via Extensions Platform:
 
-- Go to Blender Preferences > Get Extensions > Repositories > **＋** > Add Remote Repository
+- Go to Blender `Preferences` > `Get Extensions` > `Repositories` > **`＋`** > `Add Remote Repository`
 - Set the URL to `https://jeinselen.github.io/Launch-Blender-Extensions/index.json`
 - Enable `Check for Updates on Start`
-- Filter the available extensions for "Launch" and install as needed
+- Filter the available extensions with the string "Launch" and install as needed
 
 
 
